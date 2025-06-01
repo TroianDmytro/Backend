@@ -8,6 +8,10 @@ import { EmailModule } from './email/email.module';
 import { RolesModule } from './roles/roles.module';
 import { AvatarsController } from './avatars/avatars.controller';
 import { AvatarsModule } from './avatars/avatars.module';
+import { TeachersModule } from './teachers/teachers.module';
+import { CoursesModule } from './courses/courses.module';
+import { LessonsModule } from './lessons/lessons.module';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 
 @Module({
   imports: [
@@ -27,9 +31,36 @@ import { AvatarsModule } from './avatars/avatars.module';
     UsersModule, // Затем UsersModule
     EmailModule,
     AuthModule,
-    AvatarsModule
+    AvatarsModule,
+    TeachersModule, // Модуль преподавателей
+    CoursesModule,  // Модуль курсов
+    LessonsModule,  // Модуль уроков
+    SubscriptionsModule // Модуль подписок
   ],
   controllers: [AvatarsController],
 })
 export class AppModule { }
 
+
+/**
+ * Объяснение структуры модулей:
+ * 
+ * 1. **Базовые модули (в начале):**
+ *    - ConfigModule - глобальная конфигурация
+ *    - MongooseModule - подключение к MongoDB
+ *    - RolesModule - система ролей (базовая функциональность)
+ *    - UsersModule - пользователи
+ *    - EmailModule - отправка уведомлений
+ *    - AuthModule - аутентификация и авторизация
+ *    - AvatarsModule - аватары пользователей
+ * 
+ * 2. **Образовательные модули:**
+ *    - TeachersModule - управление преподавателями
+ *    - CoursesModule - управление курсами
+ *    - LessonsModule - управление уроками
+ *    - SubscriptionsModule - управление подписками
+ * 
+ * Порядок импорта важен для правильной инициализации зависимостей.
+ * Например, TeachersModule должен быть загружен после RolesModule и UsersModule,
+ * но до CoursesModule, так как курсы связаны с преподавателями.
+ */

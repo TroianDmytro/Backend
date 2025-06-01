@@ -2,7 +2,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema } from 'mongoose';
 import { Role } from '../../roles/schemas/role.schema';
-import { Avatar } from 'src/avatars/schemas/avatar.schema';
 
 
 export type UserDocument = User & Document;
