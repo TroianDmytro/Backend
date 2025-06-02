@@ -318,28 +318,8 @@ export class TeachersController {
         };
     }
 
-    /**
-     * GET /teachers/:id/courses - Получение курсов преподавателя
-     */
-    @Get(':id/courses')
-    @ApiOperation({
-        summary: 'Получение курсов преподавателя',
-        description: 'Возвращает список всех курсов, назначенных преподавателю'
-    })
-    @ApiParam({ name: 'id', description: 'ID преподавателя' })
-    @ApiResponse({ status: 200, description: 'Список курсов преподавателя' })
-    @ApiResponse({ status: 404, description: 'Преподаватель не найден' })
-    async getTeacherCourses(@Param('id') id: string) {
-        this.logger.log(`Получение курсов преподавателя с ID: ${id}`);
 
-        const courses = await this.teachersService.getTeacherCourses(id);
 
-        return {
-            teacherId: id,
-            courses: courses,
-            totalCourses: courses.length
-        };
-    }
 
     /**
      * GET /teachers/pending/applications - Получение заявок на рассмотрение
@@ -446,6 +426,28 @@ export class TeachersController {
                 ? 'Преподаватель успешно заблокирован'
                 : 'Преподаватель успешно разблокирован',
             teacher: teacher
+        };
+    }
+
+    /**
+     * GET /teachers/:id/courses - Получение курсов преподавателя
+     */
+    @Get(':id/courses')
+    @ApiOperation({
+        summary: 'Получение курсов преподавателя',
+        description: 'Возвращает список всех курсов с полной информацией'
+    })
+    async getTeacherCourses(@Param('id') id: string) {
+        this.logger.log(`Получение курсов преподавателя с ID: ${id}`);
+
+        const courses = await this.teachersService.getTeacherCourses(id);
+
+        return {
+            teacherId: id,
+            courses: courses,
+            totalCourses: courses.length,
+            publishedCourses: courses.filter(c => c.isPublished).length,
+            activeCourses: courses.filter(c => c.isActive).length
         };
     }
 }

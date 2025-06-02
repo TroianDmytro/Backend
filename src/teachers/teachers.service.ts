@@ -246,12 +246,12 @@ export class TeachersService {
         }
 
         // Проверяем, не назначен ли уже этот курс
-        if (teacher.courses.includes(courseId as any)) {
+        if (teacher.assignedCourses.includes(courseId as any)) {
             throw new ConflictException('Курс уже назначен этому преподавателю');
         }
 
         // Назначаем курс преподавателю
-        teacher.courses.push(courseId as any);
+        teacher.assignedCourses.push(courseId as any);
         await teacher.save();
 
         // Обновляем курс
@@ -283,7 +283,7 @@ export class TeachersService {
         }
 
         // Удаляем курс из списка преподавателя
-        teacher.courses = teacher.courses.filter(id => id.toString() !== courseId);
+        teacher.courses = teacher.assignedCourses.filter(id => id.toString() !== courseId);
         await teacher.save();
 
         // ИСПРАВЛЕНИЕ: обнуляем преподавателя в курсе (используем undefined вместо null)
@@ -306,15 +306,26 @@ export class TeachersService {
     async getTeacherCourses(teacherId: string): Promise<CourseDocument[]> {
         const teacher = await this.teacherModel
             .findById(teacherId)
-            .populate('courses')  // ИСПРАВЛЕНИЕ: используем populate для получения полных документов
+            .populate({
+                path: 'courses',
+                populate: {
+                    path: 'lessons',  // Вложенный populate для уроков
+                    select: 'title order duration_minutes'  // Выбираем только нужные поля
+                },
+                select: '-__v'  // Исключаем служебное поле __v
+            })
             .exec();
 
         if (!teacher) {
             throw new NotFoundException(`Преподаватель с ID ${teacherId} не найден`);
         }
 
-        // ИСПРАВЛЕНИЕ: теперь courses будет массивом CourseDocument благодаря populate
-        return teacher.courses as CourseDocument[];
+        // Фильтруем и обрабатываем курсы
+        const activeCourses = (teacher.assignedCourses as CourseDocument[]).filter(
+            course => course.isActive && course.isPublished
+        );
+
+        return activeCourses;
     }
 
     /**

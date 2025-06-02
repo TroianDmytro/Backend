@@ -1,6 +1,7 @@
 // src/teachers/schemas/teacher.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Schema as MongooseSchema } from 'mongoose';
+import { Document, Schema as MongooseSchema, Types } from 'mongoose';
+import { Course } from 'src/courses/schemas/course.schema';
 
 export type TeacherDocument = Teacher & Document;
 
@@ -8,18 +9,31 @@ export type TeacherDocument = Teacher & Document;
  * Схема преподавателя
  * Содержит все основные поля пользователя + специфичные поля для преподавателя
  */
+// @Schema({
+//     timestamps: true, // Автоматически добавляет createdAt и updatedAt
+//     toJSON: {
+//         virtuals: true, // Включает виртуальные поля в JSON
+//         transform: (doc, ret) => {
+//             ret.id = ret._id.toString();
+//             delete ret._id;
+//             delete ret.__v;
+//             // Скрываем чувствительную информацию
+//             delete ret.password;
+//             delete ret.verificationToken;
+//             delete ret.resetPasswordToken;
+//             return ret;
+//         }
+//     }
+// })
 @Schema({
-    timestamps: true, // Автоматически добавляет createdAt и updatedAt
+    timestamps: true,
     toJSON: {
-        virtuals: true, // Включает виртуальные поля в JSON
+        virtuals: true,
         transform: (doc, ret) => {
             ret.id = ret._id.toString();
             delete ret._id;
             delete ret.__v;
-            // Скрываем чувствительную информацию
             delete ret.password;
-            delete ret.verificationToken;
-            delete ret.resetPasswordToken;
             return ret;
         }
     }
@@ -77,10 +91,10 @@ export class Teacher {
 
     // Список курсов, которые ведет преподаватель (ссылки на курсы)
     @Prop({
-        type: [{ type: MongooseSchema.Types.ObjectId, ref: 'Course' }],
+        type: [{ type: Types.ObjectId, ref: 'Course' }],
         default: []
     })
-    courses: MongooseSchema.Types.ObjectId[]; // Массив ID курсов
+    assignedCourses: Types.ObjectId[] | Course[];  // Может быть и тем, и другим
 
     // Статусы и состояние аккаунта
     @Prop({ default: false })

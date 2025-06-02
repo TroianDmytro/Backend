@@ -1,6 +1,6 @@
 // src/courses/schemas/course.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Schema as MongooseSchema } from 'mongoose';
+import { Document, Schema as MongooseSchema, Types } from 'mongoose';
 
 export type CourseDocument = Course & Document;
 
@@ -99,8 +99,11 @@ export class Course {
     @Prop({ type: Number, default: 0 })
     current_students_count: number; // Текущее количество студентов
 
-    @Prop({ type: [String], default: [] })
-    prerequisites: string[]; // Предварительные требования
+    @Prop({
+        type: [{ type: Types.ObjectId, ref: 'Course' }],
+        default: []
+    })
+    prerequisites: Types.ObjectId[] | Course[]; // Предварительные требования
 
     @Prop({ type: [String], default: [] })
     learning_outcomes: string[]; // Что изучит студент
