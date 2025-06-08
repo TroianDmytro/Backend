@@ -47,7 +47,6 @@ export class Teacher {
         type: MongooseSchema.Types.ObjectId,
         ref: 'Avatar',
         default: null,
-        index: true
     })
     avatarId?: MongooseSchema.Types.ObjectId;
 
@@ -155,7 +154,6 @@ TeacherSchema.virtual('id').get(function () {
 });
 
 // Создаем индексы для оптимизации поиска
-TeacherSchema.index({ email: 1 }, { unique: true });
 TeacherSchema.index({ avatarId: 1 });
 TeacherSchema.index({ isBlocked: 1 });
 TeacherSchema.index({ isEmailVerified: 1 });

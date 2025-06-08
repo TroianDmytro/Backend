@@ -378,8 +378,8 @@ export class CoursesController {
      * GET /courses/:id/statistics - Получение статистики курса
      */
     @Get(':id/statistics')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin', 'teacher')
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'teacher')
     @ApiOperation({
         summary: 'Получение статистики курса',
         description: 'Возвращает статистику по студентам, урокам и доходам курса'
@@ -471,8 +471,8 @@ export class CoursesController {
      * POST /courses/:id/enroll - Записаться на курс (создать подписку)
      */
     @Post(':id/enroll')
-    // @UseGuards(RolesGuard)
-    // @Roles('user')
+    @UseGuards(RolesGuard)
+    @Roles('user')
     @ApiOperation({
         summary: 'Записаться на курс',
         description: 'Создает подписку пользователя на курс'
@@ -502,8 +502,8 @@ export class CoursesController {
      * GET /courses/:id/students - Получение списка студентов курса
      */
     @Get(':id/students')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin', 'teacher')
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'teacher')
     @ApiOperation({
         summary: 'Получение списка студентов курса',
         description: 'Возвращает список студентов, записанных на курс'
@@ -538,8 +538,8 @@ export class CoursesController {
      * POST /courses/:id/duplicate - Дублирование курса
      */
     @Post(':id/duplicate')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin', 'teacher')
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'teacher')
     @ApiOperation({
         summary: 'Дублирование курса',
         description: 'Создает копию курса со всеми уроками'

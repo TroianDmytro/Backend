@@ -7,6 +7,10 @@ import { Course, CourseSchema } from './schemas/course.schema';
 import { Teacher, TeacherSchema } from '../teachers/schemas/teacher.schema';
 import { Lesson, LessonSchema } from '../lessons/schemas/lesson.schema';
 import { Subscription, SubscriptionSchema } from '../subscriptions/schemas/subscription.schema';
+import { TeachersModule } from 'src/teachers/teachers.module';
+import { LessonsModule } from 'src/lessons/lessons.module';
+import { SubscriptionsModule } from 'src/subscriptions/subscriptions.module';
+import { TeachersService } from 'src/teachers/teachers.service';
 
 @Module({
     imports: [
@@ -16,9 +20,9 @@ import { Subscription, SubscriptionSchema } from '../subscriptions/schemas/subsc
             { name: Lesson.name, schema: LessonSchema },
             { name: Subscription.name, schema: SubscriptionSchema }
         ]),
-        // forwardRef(() => TeachersModule), // Добавим когда потребуется избежать циклической зависимости
-        // forwardRef(() => LessonsModule),
-        // forwardRef(() => SubscriptionsModule)
+        forwardRef(() => TeachersModule), // Добавим когда потребуется избежать циклической зависимости
+        forwardRef(() => LessonsModule),
+        forwardRef(() => SubscriptionsModule)
     ],
     controllers: [CoursesController],
     providers: [CoursesService],

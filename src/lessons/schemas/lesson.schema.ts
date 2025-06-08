@@ -28,7 +28,6 @@ export class Lesson {
         type: MongooseSchema.Types.ObjectId,
         ref: 'Course',
         required: true,
-        index: true
     })
     courseId: MongooseSchema.Types.ObjectId; // ID курса
 
@@ -166,7 +165,6 @@ LessonSchema.virtual('homework_submissions', {
 });
 
 // Индексы для оптимизации
-LessonSchema.index({ courseId: 1, order: 1 }); // Составной индекс для сортировки уроков в курсе
 LessonSchema.index({ courseId: 1 });
 LessonSchema.index({ isActive: 1, isPublished: 1 });
 LessonSchema.index({ isFree: 1 });

@@ -10,8 +10,8 @@ import { Roles } from '../auth/decorators/roles.decorator';
 
 @ApiTags('roles')
 @Controller('roles')
-// @UseGuards(JwtAuthGuard, RolesGuard)
-// @ApiBearerAuth()
+@UseGuards(JwtAuthGuard, RolesGuard)
+@ApiBearerAuth()
 export class RolesController {
     constructor(private readonly rolesService: RolesService) { }
 

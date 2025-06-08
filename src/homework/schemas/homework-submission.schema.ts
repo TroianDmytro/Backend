@@ -28,7 +28,6 @@ export class HomeworkSubmission {
         type: MongooseSchema.Types.ObjectId,
         ref: 'Lesson',
         required: true,
-        index: true
     })
     lessonId: MongooseSchema.Types.ObjectId; // ID урока
 
@@ -36,7 +35,6 @@ export class HomeworkSubmission {
         type: MongooseSchema.Types.ObjectId,
         ref: 'User',
         required: true,
-        index: true
     })
     studentId: MongooseSchema.Types.ObjectId; // ID студента
 
@@ -44,7 +42,6 @@ export class HomeworkSubmission {
         type: MongooseSchema.Types.ObjectId,
         ref: 'Course',
         required: true,
-        index: true
     })
     courseId: MongooseSchema.Types.ObjectId; // ID курса
 
@@ -176,7 +173,6 @@ HomeworkSubmissionSchema.virtual('teacher', {
 });
 
 // Индексы для оптимизации
-HomeworkSubmissionSchema.index({ lessonId: 1, studentId: 1, attempt_number: 1 }); // Составной уникальный индекс
 HomeworkSubmissionSchema.index({ courseId: 1 });
 HomeworkSubmissionSchema.index({ studentId: 1 });
 HomeworkSubmissionSchema.index({ status: 1 });

@@ -28,7 +28,6 @@ export class User {
         type: MongooseSchema.Types.ObjectId,
         ref: 'Avatar',
         default: null,
-        index: true
     })
     avatarId?: MongooseSchema.Types.ObjectId;
 
@@ -89,7 +88,6 @@ UserSchema.virtual('id').get(function () {
 });
 
 // Индексы для оптимизации
-UserSchema.index({ email: 1 }, { unique: true });
 UserSchema.index({ avatarId: 1 });
 UserSchema.index({ roles: 1 });
 UserSchema.index({ isBlocked: 1 });

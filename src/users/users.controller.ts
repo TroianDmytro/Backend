@@ -29,16 +29,16 @@ import { UpdateUserDto } from './dto/update-user.dto';
 
 @ApiTags('users')
 @Controller('users')
-// @UseGuards(JwtAuthGuard, RolesGuard)
-// @ApiBearerAuth()
+@UseGuards(JwtAuthGuard, RolesGuard)
+@ApiBearerAuth()
 export class UsersController {
     private readonly logger = new Logger(UsersController.name);
 
     constructor(private readonly usersService: UsersService) { }
 
     @Get(':id')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin')
+    @UseGuards(RolesGuard)
+    @Roles('admin')
     @ApiOperation({ summary: 'Получение профиля пользователя по ID ' })
     @ApiResponse({ status: 200, description: 'Профиль пользователя' })
     @ApiResponse({ status: 401, description: 'Не авторизован' })
@@ -70,8 +70,8 @@ export class UsersController {
     }
 
     @Put(':id')
-    // @UseGuards(JwtAuthGuard, RolesGuard)
-    // @Roles('admin', 'user')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin', 'user')
     @ApiOperation({ summary: 'Обновление профиля пользователя' })
     @ApiResponse({ status: 200, description: 'Профиль успешно обновлен' })
     @ApiResponse({ status: 400, description: 'Некорректные данные' })
@@ -113,8 +113,8 @@ export class UsersController {
     }
 
     @Patch(':id/block')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin')
+    @UseGuards(RolesGuard)
+    @Roles('admin')
     @ApiOperation({ summary: 'Блокировка/разблокировка пользователя ' })
     @ApiResponse({ status: 200, description: 'Статус пользователя изменен' })
     @ApiResponse({ status: 401, description: 'Не авторизован' })
@@ -149,8 +149,8 @@ export class UsersController {
     }
 
     @Delete(':id')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin')
+    @UseGuards(RolesGuard)
+    @Roles('admin')
     @ApiOperation({ summary: 'Удаление пользователя' })
     @ApiResponse({ status: 200, description: 'Пользователь успешно удален' })
     @ApiResponse({ status: 401, description: 'Не авторизован' })
@@ -173,7 +173,7 @@ export class UsersController {
     }
 
     @Post(':userId/roles/:roleId')
-    // @Roles('admin')
+    @Roles('admin')
     @ApiOperation({ summary: 'Добавление роли пользователю' })
     @ApiResponse({ status: 200, description: 'Роль успешно добавлена' })
     @ApiResponse({ status: 404, description: 'Пользователь или роль не найдены' })
@@ -182,7 +182,7 @@ export class UsersController {
     }
 
     @Delete(':userId/roles/:roleId')
-    // @Roles('admin')
+    @Roles('admin')
     @ApiOperation({ summary: 'Удаление роли у пользователя' })
     @ApiResponse({ status: 200, description: 'Роль успешно удалена' })
     @ApiResponse({ status: 404, description: 'Пользователь или роль не найдены' })
@@ -192,8 +192,8 @@ export class UsersController {
 
 
     @Get()
-    // @UseGuards(RolesGuard)
-    // @Roles('admin') // Только администраторы могут получать список всех пользователей
+    @UseGuards(RolesGuard)
+    @Roles('admin') // Только администраторы могут получать список всех пользователей
     @ApiOperation({ summary: 'Получение списка всех пользователей' })
     @ApiResponse({
         status: 200,
@@ -222,7 +222,7 @@ export class UsersController {
     @ApiResponse({ status: 401, description: 'Не авторизован' })
     @ApiResponse({ status: 403, description: 'Нет прав доступа' })
     async getAllUsers(@Request() req) {
-        // this.logger.log(`Администратор ${req.user.email} запрашивает список всех пользователей`);
+        this.logger.log(`Администратор ${req.user.email} запрашивает список всех пользователей`);
 
         const users = await this.usersService.findAll();
 

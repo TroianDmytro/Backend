@@ -29,14 +29,14 @@ import { UpdateSubscriptionDto } from './dto/update-subscription.dto';
 import { SubscriptionResponseDto } from './dto/subscription-response.dto';
 import { SubscriptionFilterDto } from './dto/subscription-filter.dto';
 import { CancelSubscriptionDto } from './dto/cancel-subscription.dto';
-// import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-// import { RolesGuard } from '../auth/guards/roles.guard';
-// import { Roles } from '../auth/decorators/roles.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @ApiTags('subscriptions')
 @Controller('subscriptions')
-// @UseGuards(JwtAuthGuard) // Закомментировано для работы без JWT
-// @ApiBearerAuth()
+@UseGuards(JwtAuthGuard) // Закомментировано для работы без JWT
+@ApiBearerAuth()
 export class SubscriptionsController {
     private readonly logger = new Logger(SubscriptionsController.name);
 
@@ -46,8 +46,8 @@ export class SubscriptionsController {
      * POST /subscriptions - Создание новой подписки
      */
     @Post()
-    // @UseGuards(RolesGuard)
-    // @Roles('admin', 'user')
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'user')
     @ApiOperation({
         summary: 'Создание новой подписки',
         description: 'Создает подписку на курс или на определенный период'
@@ -88,8 +88,8 @@ export class SubscriptionsController {
      * GET /subscriptions - Получение списка подписок с фильтрацией
      */
     @Get()
-    // @UseGuards(RolesGuard)
-    // @Roles('admin', 'user')
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'user')
     @ApiOperation({
         summary: 'Получение списка подписок',
         description: 'Возвращает список подписок с возможностью фильтрации'
@@ -181,8 +181,8 @@ export class SubscriptionsController {
      * PUT /subscriptions/:id - Обновление подписки
      */
     @Put(':id')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin', 'user')
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'user')
     @ApiOperation({
         summary: 'Обновление подписки',
         description: 'Обновляет данные подписки. Пользователь может редактировать только свои подписки.'
@@ -221,8 +221,8 @@ export class SubscriptionsController {
      * DELETE /subscriptions/:id - Удаление подписки
      */
     @Delete(':id')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin')
+    @UseGuards(RolesGuard)
+    @Roles('admin')
     @ApiOperation({
         summary: 'Удаление подписки',
         description: 'Полностью удаляет подписку из системы (только для админов)'
@@ -245,8 +245,8 @@ export class SubscriptionsController {
      * POST /subscriptions/:id/cancel - Отмена подписки
      */
     @Post(':id/cancel')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin', 'user')
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'user')
     @ApiOperation({
         summary: 'Отмена подписки',
         description: 'Отменяет подписку с указанием причины'
@@ -288,8 +288,8 @@ export class SubscriptionsController {
      * POST /subscriptions/:id/renew - Продление подписки
      */
     @Post(':id/renew')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin', 'user')
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'user')
     @ApiOperation({
         summary: 'Продление подписки',
         description: 'Продлевает подписку на следующий период'
@@ -350,8 +350,8 @@ export class SubscriptionsController {
      * POST /subscriptions/:id/activate - Активация подписки
      */
     @Post(':id/activate')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin')
+    @UseGuards(RolesGuard)
+    @Roles('admin')
     @ApiOperation({
         summary: 'Активация подписки',
         description: 'Активирует подписку после оплаты (только для админов)'
@@ -398,8 +398,8 @@ export class SubscriptionsController {
      * GET /subscriptions/user/:userId - Получение подписок пользователя
      */
     @Get('user/:userId')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin', 'user')
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'user')
     @ApiOperation({
         summary: 'Получение подписок пользователя',
         description: 'Возвращает все подписки конкретного пользователя'
@@ -441,8 +441,8 @@ export class SubscriptionsController {
      * GET /subscriptions/course/:courseId - Получение подписок на курс
      */
     @Get('course/:courseId')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin', 'teacher')
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'teacher')
     @ApiOperation({
         summary: 'Получение подписок на курс',
         description: 'Возвращает все подписки на конкретный курс'
@@ -482,8 +482,8 @@ export class SubscriptionsController {
      * GET /subscriptions/statistics/overview - Общая статистика подписок
      */
     @Get('statistics/overview')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin')
+    @UseGuards(RolesGuard)
+    @Roles('admin')
     @ApiOperation({
         summary: 'Общая статистика подписок',
         description: 'Возвращает общую статистику по подпискам'
@@ -503,8 +503,8 @@ export class SubscriptionsController {
      * POST /subscriptions/expire-check - Проверка истекающих подписок
      */
     @Post('expire-check')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin')
+    @UseGuards(RolesGuard)
+    @Roles('admin')
     @ApiOperation({
         summary: 'Проверка истекающих подписок',
         description: 'Проверяет и обновляет статусы истекающих подписок'

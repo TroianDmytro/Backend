@@ -55,7 +55,6 @@ export class Course {
         type: MongooseSchema.Types.ObjectId,
         ref: 'Teacher',
         required: true,
-        index: true
     })
     teacherId: MongooseSchema.Types.ObjectId; // ID преподавателя
 

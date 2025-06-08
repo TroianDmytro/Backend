@@ -29,14 +29,14 @@ import { UpdateTeacherDto } from './dto/update-teacher.dto';
 import { TeacherApprovalDto } from './dto/teacher-approval.dto';
 import { AssignCourseDto } from './dto/assign-course.dto';
 import { TeacherResponseDto } from './dto/teacher-response.dto';
-// import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-// import { RolesGuard } from '../auth/guards/roles.guard';
-// import { Roles } from '../auth/decorators/roles.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @ApiTags('teachers')
 @Controller('teachers')
-// @UseGuards(JwtAuthGuard) // Закомментировано для работы без JWT
-// @ApiBearerAuth()
+@UseGuards(JwtAuthGuard) // Закомментировано для работы без JWT
+@ApiBearerAuth()
 export class TeachersController {
     private readonly logger = new Logger(TeachersController.name);
 
@@ -74,8 +74,8 @@ export class TeachersController {
      * GET /teachers - Получение списка всех преподавателей
      */
     @Get()
-    // @UseGuards(RolesGuard)
-    // @Roles('admin', 'user') // Пользователи могут видеть только одобренных преподавателей
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'user') // Пользователи могут видеть только одобренных преподавателей
     @ApiOperation({ summary: 'Получение списка преподавателей' })
     @ApiQuery({
         name: 'status',
@@ -155,8 +155,8 @@ export class TeachersController {
      * PUT /teachers/:id - Обновление данных преподавателя
      */
     @Put(':id')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin', 'teacher') // Преподаватель может редактировать только свой профиль
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'teacher') // Преподаватель может редактировать только свой профиль
     @ApiOperation({ summary: 'Обновление данных преподавателя' })
     @ApiParam({ name: 'id', description: 'ID преподавателя' })
     @ApiBody({ type: UpdateTeacherDto })
@@ -197,8 +197,8 @@ export class TeachersController {
      * POST /teachers/:id/approve - Одобрение/отклонение заявки преподавателя (только админ)
      */
     @Post(':id/approve')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin')
+    @UseGuards(RolesGuard)
+    @Roles('admin')
     @ApiOperation({
         summary: 'Одобрение или отклонение заявки преподавателя',
         description: 'Только администраторы могут одобрять или отклонять заявки на регистрацию преподавателей'
@@ -241,8 +241,8 @@ export class TeachersController {
      * POST /teachers/:teacherId/courses/:courseId - Назначение курса преподавателю
      */
     @Post(':teacherId/courses/:courseId')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin')
+    @UseGuards(RolesGuard)
+    @Roles('admin')
     @ApiOperation({
         summary: 'Назначение курса преподавателю',
         description: 'Закрепляет курс за выбранным преподавателем'
@@ -270,8 +270,8 @@ export class TeachersController {
      * DELETE /teachers/:teacherId/courses/:courseId - Удаление курса у преподавателя
      */
     @Delete(':teacherId/courses/:courseId')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin')
+    @UseGuards(RolesGuard)
+    @Roles('admin')
     @ApiOperation({
         summary: 'Удаление курса у преподавателя',
         description: 'Убирает назначение курса у преподавателя'
@@ -298,8 +298,8 @@ export class TeachersController {
      * DELETE /teachers/:id - Удаление заявки/профиля преподавателя
      */
     @Delete(':id')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin')
+    @UseGuards(RolesGuard)
+    @Roles('admin')
     @ApiOperation({
         summary: 'Удаление заявки или профиля преподавателя',
         description: 'Полностью удаляет заявку или профиль преподавателя из системы. Также удаляет связанные курсы если они есть.'
@@ -325,8 +325,8 @@ export class TeachersController {
      * GET /teachers/pending/applications - Получение заявок на рассмотрение
      */
     @Get('pending/applications')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin')
+    @UseGuards(RolesGuard)
+    @Roles('admin')
     @ApiOperation({
         summary: 'Получение заявок на рассмотрение',
         description: 'Возвращает список всех заявок на регистрацию преподавателей со статусом "pending"'
@@ -393,8 +393,8 @@ export class TeachersController {
      * POST /teachers/:id/block - Блокировка/разблокировка преподавателя
      */
     @Post(':id/block')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin')
+    @UseGuards(RolesGuard)
+    @Roles('admin')
     @ApiOperation({
         summary: 'Блокировка или разблокировка преподавателя',
         description: 'Изменяет статус блокировки преподавателя'
