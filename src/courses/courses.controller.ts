@@ -12,7 +12,8 @@ import {
     Request,
     Logger,
     NotFoundException,
-    BadRequestException
+    BadRequestException,
+    ForbiddenException
 } from '@nestjs/common';
 import {
     ApiTags,
@@ -28,25 +29,26 @@ import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
 import { CourseResponseDto } from './dto/course-response.dto';
 import { CourseFilterDto } from './dto/course-filter.dto';
-// import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-// import { RolesGuard } from '../auth/guards/roles.guard';
-// import { Roles } from '../auth/decorators/roles.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { TeachersService } from 'src/teachers/teachers.service';
 
 @ApiTags('courses')
 @Controller('courses')
-// @UseGuards(JwtAuthGuard) // Закомментировано для работы без JWT
-// @ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 export class CoursesController {
     private readonly logger = new Logger(CoursesController.name);
 
-    constructor(private readonly coursesService: CoursesService) { }
+    constructor(private readonly coursesService: CoursesService, private readonly teachersService: TeachersService) { }
 
     /**
      * POST /courses - Создание нового курса
      */
     @Post()
-    // @UseGuards(RolesGuard)
-    // @Roles('admin', 'teacher') // Только админы и преподаватели могут создавать курсы
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'teacher') // Только админы и преподаватели могут создавать курсы
     @ApiOperation({
         summary: 'Создание нового курса',
         description: 'Создает новый курс. Только одобренные преподаватели могут создавать курсы.'
@@ -64,17 +66,17 @@ export class CoursesController {
         @Body() createCourseDto: CreateCourseDto,
         @Request() req?
     ) {
-        // const currentUserId = req?.user?.userId;
-        // const isAdmin = req?.user?.roles?.includes('admin');
-        const currentUserId = 'temp-user-id'; // Временно для работы без JWT
-        const isAdmin = true; // Временно для работы без JWT
+        const currentUserId = req?.user?.userId;
+        const isAdmin = req?.user?.roles?.includes('admin');
+        // const currentUserId = 'temp-user-id'; // Временно для работы без JWT
+        // const isAdmin = true; // Временно для работы без JWT
 
         this.logger.log(`Создание курса: ${createCourseDto.title}`);
 
         // Если не админ, преподаватель может создать курс только для себя
-        // if (!isAdmin && createCourseDto.teacherId !== currentUserId) {
-        //     throw new ForbiddenException('Вы можете создавать курсы только для себя');
-        // }
+        if (!isAdmin && createCourseDto.teacherId !== currentUserId) {
+            throw new ForbiddenException('Вы можете создавать курсы только для себя');
+        }
 
         const course = await this.coursesService.create(createCourseDto);
 
@@ -173,8 +175,8 @@ export class CoursesController {
      * PUT /courses/:id - Обновление курса
      */
     @Put(':id')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin', 'teacher')
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'teacher')
     @ApiOperation({
         summary: 'Обновление курса',
         description: 'Обновляет данные курса. Преподаватель может редактировать только свои курсы.'
@@ -194,10 +196,10 @@ export class CoursesController {
         @Body() updateCourseDto: UpdateCourseDto,
         @Request() req?
     ) {
-        // const currentUserId = req?.user?.userId;
-        // const isAdmin = req?.user?.roles?.includes('admin');
-        const currentUserId = 'temp-user-id'; // Временно для работы без JWT
-        const isAdmin = true; // Временно для работы без JWT
+        const currentUserId = req?.user?.userId;
+        const isAdmin = req?.user?.roles?.includes('admin');
+        // const currentUserId = 'temp-user-id'; // Временно для работы без JWT
+        // const isAdmin = true; // Временно для работы без JWT
 
         this.logger.log(`Обновление курса с ID: ${id}`);
 
@@ -207,9 +209,9 @@ export class CoursesController {
             throw new NotFoundException('Курс не найден');
         }
 
-        // if (!isAdmin && course.teacherId.toString() !== currentUserId) {
-        //     throw new ForbiddenException('У вас нет прав на редактирование этого курса');
-        // }
+        if (!isAdmin && course.teacherId.toString() !== currentUserId) {
+            throw new ForbiddenException('У вас нет прав на редактирование этого курса');
+        }
 
         const updatedCourse = await this.coursesService.update(id, updateCourseDto);
 
@@ -223,8 +225,8 @@ export class CoursesController {
      * DELETE /courses/:id - Удаление курса
      */
     @Delete(':id')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin', 'teacher')
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'teacher')
     @ApiOperation({
         summary: 'Удаление курса',
         description: 'Удаляет курс и все связанные с ним уроки. Нельзя удалить курс с активными подписками.'
@@ -238,10 +240,10 @@ export class CoursesController {
         @Param('id') id: string,
         @Request() req?
     ) {
-        // const currentUserId = req?.user?.userId;
-        // const isAdmin = req?.user?.roles?.includes('admin');
-        const currentUserId = 'temp-user-id'; // Временно для работы без JWT
-        const isAdmin = true; // Временно для работы без JWT
+        const currentUserId = req?.user?.userId;
+        const isAdmin = req?.user?.roles?.includes('admin');
+        // const currentUserId = 'temp-user-id'; // Временно для работы без JWT
+        // const isAdmin = true; // Временно для работы без JWT
 
         this.logger.log(`Удаление курса с ID: ${id}`);
 
@@ -251,9 +253,9 @@ export class CoursesController {
             throw new NotFoundException('Курс не найден');
         }
 
-        // if (!isAdmin && course.teacherId.toString() !== currentUserId) {
-        //     throw new ForbiddenException('У вас нет прав на удаление этого курса');
-        // }
+        if (!isAdmin && course.teacherId.toString() !== currentUserId) {
+            throw new ForbiddenException('У вас нет прав на удаление этого курса');
+        }
 
         await this.coursesService.delete(id);
 
@@ -266,8 +268,8 @@ export class CoursesController {
      * POST /courses/:id/publish - Публикация/снятие с публикации курса
      */
     @Post(':id/publish')
-    // @UseGuards(RolesGuard)
-    // @Roles('admin', 'teacher')
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'teacher')
     @ApiOperation({
         summary: 'Публикация или снятие с публикации курса',
         description: 'Изменяет статус публикации курса'
@@ -289,20 +291,63 @@ export class CoursesController {
         @Body('isPublished') isPublished: boolean,
         @Request() req?
     ) {
-        // const currentUserId = req?.user?.userId;
-        // const isAdmin = req?.user?.roles?.includes('admin');
-        const currentUserId = 'temp-user-id'; // Временно для работы без JWT
-        const isAdmin = true; // Временно для работы без JWT
+        const currentUserId = req?.user?.userId;
+        const isAdmin = req?.user?.roles?.includes('admin');
+        // const currentUserId = 'temp-user-id'; // Временно для работы без JWT
+        // const isAdmin = true; // Временно для работы без JWT
 
         this.logger.log(`Изменение статуса публикации курса ${id} на ${isPublished}`);
 
-        const course = await this.coursesService.updatePublishStatus(id, isPublished);
+        // Получаем курс для проверки владельца
+        const course = await this.coursesService.findById(id);
+        if (!course) {
+            throw new NotFoundException('Курс не найден');
+        }
+
+        // Проверка прав доступа
+        const isOwner = course.teacherId.toString() === currentUserId;
+
+        if (!isAdmin && !isOwner) {
+            this.logger.warn(
+                `Отказано в доступе. Пользователь ${req?.user?.email} ` +
+                `(ID: ${currentUserId}) пытается изменить статус публикации курса ${id}. ` +
+                `Владелец курса: ${course.teacherId}`
+            );
+            throw new ForbiddenException(
+                'У вас нет прав на изменение статуса публикации этого курса. ' +
+                'Только владелец курса или администратор могут изменять статус публикации.'
+            );
+        }
+
+        // Дополнительная проверка для преподавателей
+        if (!isAdmin && isOwner) {
+            // Проверяем, что преподаватель одобрен и не заблокирован
+            const teacher = await this.teachersService.findById(currentUserId);
+            if (!teacher) {
+                throw new NotFoundException('Преподаватель не найден');
+            }
+
+            if (!teacher.isApproved) {
+                throw new ForbiddenException(
+                    'Только одобренные преподаватели могут публиковать курсы'
+                );
+            }
+
+            if (teacher.isBlocked) {
+                throw new ForbiddenException(
+                    'Заблокированные преподаватели не могут изменять статус публикации курсов'
+                );
+            }
+        }
+
+        // Выполняем изменение статуса публикации
+        const updatedCourse = await this.coursesService.updatePublishStatus(id, isPublished);
 
         return {
             message: isPublished
                 ? 'Курс успешно опубликован'
                 : 'Курс снят с публикации',
-            course: course
+            course: updatedCourse
         };
     }
 

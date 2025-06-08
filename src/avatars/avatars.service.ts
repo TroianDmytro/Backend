@@ -39,7 +39,7 @@ export class AvatarsService {
 
         // Шаг 3: Валидируем загруженный файл с новыми ограничениями
         const validationResult = await this.fileUploadValidator.validateUploadedFile(file, {
-            minSizeKB,   // 300 КБ минимум
+            minSizeKB,   // 10 КБ минимум
             maxSizeKB,  // 1.5 МБ максимум
             minWidth,
             minHeight
@@ -91,7 +91,7 @@ export class AvatarsService {
 
         // Валидируем новый файл
         const validationResult = await this.fileUploadValidator.validateUploadedFile(file, {
-            minSizeKB,   // 300 КБ минимум
+            minSizeKB,   // 10 КБ минимум
             maxSizeKB,  // 1.5 МБ максимум
             minWidth,
             minHeight

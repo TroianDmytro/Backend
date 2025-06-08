@@ -1,10 +1,11 @@
 // src/auth/auth.controller.ts
-import { Controller, Post, Body, Get, Param, Query, Logger, Request, NotFoundException, BadRequestException, Res } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, Query, Logger, Request, NotFoundException, BadRequestException, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
-import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBody } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { CreateUserDto } from '../users/dto/create-user.dto';
 import { LoginUserDto } from '../users/dto/login-user.dto';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -151,9 +152,9 @@ export class AuthController {
     }
 
     @Post('change-password')
-    // @UseGuards(JwtAuthGuard)
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
     @ApiOperation({ summary: 'Изменение пароля авторизованным пользователем' })
-    // @ApiBearerAuth()
     @ApiResponse({ status: 200, description: 'Пароль успешно изменен' })
     @ApiResponse({ status: 400, description: 'Неверный текущий пароль' })
     @ApiBody({

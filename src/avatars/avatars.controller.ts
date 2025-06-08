@@ -20,13 +20,13 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AvatarUploadResponseDto, UploadAvatarFileDto } from './dto/upload-avatar-file.dto';
 import { CustomFileTypeValidator, CustomMaxFileSizeValidator, ImageDimensionsValidator } from './validators/custom-file-validators';
 import { maxSizeKB, minSizeKB } from './schemas/avatar.schema';
-// import { RolesGuard } from '../auth/guards/roles.guard';
-// import { Roles } from '../auth/decorators/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 @ApiTags('avatars')
 @Controller('avatars')
-// @UseGuards(JwtAuthGuard)
-// @ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 export class AvatarsController {
   private readonly logger = new Logger(AvatarsController.name);
 
@@ -36,8 +36,8 @@ export class AvatarsController {
    * GET /avatars/:userId - получение аватара пользователя
    */
   @Get(':userId')
-  // @UseGuards(RolesGuard)
-  // @Roles('admin', 'user')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'user')
   @ApiOperation({
     summary: 'Получение аватара пользователя',
     description: 'Возвращает изображение аватара в формате base64'
@@ -120,8 +120,8 @@ export class AvatarsController {
    * POST /avatars/upload/:userId - загрузка аватара для пользователя
    */
   @Post('upload/:userId')
-  // @UseGuards(RolesGuard)
-  // @Roles('admin', 'user')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'user')
   @UseInterceptors(FileInterceptor('avatar', {
     limits: {
       fileSize: 1.5 * 1024 * 1024, // 1.5MB
@@ -261,19 +261,19 @@ export class AvatarsController {
     }
 
     // Проверка прав доступа
-    // const isAdmin = req.user?.roles && req.user.roles.includes('admin');
-    // const isOwner = userId === req.user?.userId;
+    const isAdmin = req.user.roles && req.user.roles.includes('admin');
+    const isOwner = userId === req.user.userId;
 
-    // if (!isAdmin && !isOwner) {
-    //   this.logger.warn(
-    //     `Отказано в доступе. Пользователь ${req.user?.email} ` +
-    //     `(ID: ${req.user?.userId}) пытается загрузить аватар для ${userId}. ` +
-    //     `isAdmin: ${isAdmin}, isOwner: ${isOwner}`
-    //   );
-    //   throw new BadRequestException(
-    //     'У вас нет прав на загрузку аватара для этого пользователя'
-    //   );
-    // }
+    if (!isAdmin && !isOwner) {
+      this.logger.warn(
+        `Отказано в доступе. Пользователь ${req.user.email} ` +
+        `(ID: ${req.user.userId}) пытается загрузить аватар для ${userId}. ` +
+        `isAdmin: ${isAdmin}, isOwner: ${isOwner}`
+      );
+      throw new BadRequestException(
+        'У вас нет прав на загрузку аватара для этого пользователя'
+      );
+    }
 
     // Дополнительная валидация
     await this.performAdditionalFileValidation(file);
@@ -464,8 +464,8 @@ export class AvatarsController {
    * PUT /avatars/replace/:userId - замена аватара пользователя
    */
   @Put('replace/:userId')
-  // @UseGuards(RolesGuard)
-  // @Roles('admin', 'user')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'user')
   @UseInterceptors(FileInterceptor('avatar'))
   @ApiOperation({
     summary: 'Замена аватара пользователя',
@@ -531,8 +531,8 @@ export class AvatarsController {
    * DELETE /avatars/:userId - удаление аватара пользователя
    */
   @Delete(':userId')
-  // @UseGuards(RolesGuard)
-  // @Roles('admin', 'user')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'user')
   @ApiOperation({ summary: 'Удаление аватара пользователя' })
   @ApiParam({ name: 'userId', description: 'ID пользователя' })
   @ApiResponse({

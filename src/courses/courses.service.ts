@@ -57,8 +57,8 @@ export class CoursesService {
         const savedCourse = await newCourse.save();
 
         // Добавляем курс в список курсов преподавателя
-        if (!teacher.courses.push(savedCourse._id as any)) {
-            teacher.courses.push(savedCourse._id as any);
+        if (!teacher.assignedCourses.some(courseId => courseId.toString() === savedCourse.id)) {
+            teacher.assignedCourses.push(savedCourse.id as any);
             await teacher.save();
         }
 
@@ -187,13 +187,15 @@ export class CoursesService {
             // Удаляем курс из списка старого преподавателя
             const oldTeacher = await this.teacherModel.findById(course.teacherId).exec();
             if (oldTeacher) {
-                oldTeacher.courses = oldTeacher.courses.filter(courseId => courseId.toString() !== id);
+                oldTeacher.assignedCourses = oldTeacher.assignedCourses.filter(
+                    courseId => courseId.toString() !== id
+                ) as any;
                 await oldTeacher.save();
             }
 
             // Добавляем курс в список нового преподавателя
-            if (!newTeacher.courses.includes(id as any)) {
-                newTeacher.courses.push(id as any);
+            if (!newTeacher.assignedCourses.some(courseId => courseId.toString() === id)) {
+                newTeacher.assignedCourses.push(id as any);
                 await newTeacher.save();
             }
         }
@@ -236,7 +238,9 @@ export class CoursesService {
         // Удаляем курс из списка преподавателя
         const teacher = await this.teacherModel.findById(course.teacherId).exec();
         if (teacher) {
-            teacher.courses = teacher.courses.filter(courseId => courseId.toString() !== id);
+            teacher.assignedCourses = teacher.assignedCourses.filter(
+                courseId => courseId.toString() !== id
+            ) as any;
             await teacher.save();
         }
 

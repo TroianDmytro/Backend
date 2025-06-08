@@ -271,6 +271,9 @@ export class TeachersService {
     /**
      * Удаление курса у преподавателя
      */
+    /**
+ * Удаление курса у преподавателя
+ */
     async removeCourse(teacherId: string, courseId: string): Promise<TeacherDocument> {
         const teacher = await this.teacherModel.findById(teacherId).exec();
         if (!teacher) {
@@ -283,16 +286,17 @@ export class TeachersService {
         }
 
         // Удаляем курс из списка преподавателя
-        teacher.courses = teacher.assignedCourses.filter(id => id.toString() !== courseId);
+        teacher.assignedCourses = teacher.assignedCourses.filter(
+            id => id.toString() !== courseId
+        ) as any;
         await teacher.save();
 
-        // ИСПРАВЛЕНИЕ: обнуляем преподавателя в курсе (используем undefined вместо null)
+        // Обнуляем преподавателя в курсе
         course.teacherId = undefined as any;
         await course.save();
 
         this.logger.log(`Курс ${courseId} удален у преподавателя ${teacherId}`);
 
-        // ИСПРАВЛЕНИЕ: проверяем результат на null
         const result = await this.findById(teacherId);
         if (!result) {
             throw new NotFoundException('Преподаватель не найден после удаления курса');

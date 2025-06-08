@@ -73,5 +73,5 @@ AvatarSchema.index({ userId: 1 });
 
 export const minSizeKB = 10;
 export const maxSizeKB = 1536;
-export const minWidth = 512;
-export const minHeight = 512;
+export const minWidth = 256;
+export const minHeight = 256;
