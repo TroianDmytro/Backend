@@ -5,7 +5,7 @@ import { Document, Schema as MongooseSchema, Types } from 'mongoose';
 export type CourseDocument = Course & Document;
 
 /**
- * Схема курса
+ * схема курса
  */
 @Schema({
     timestamps: true,
@@ -58,15 +58,24 @@ export class Course {
     })
     teacherId: MongooseSchema.Types.ObjectId; // ID преподавателя
 
-    // Категория и теги
-    @Prop({ type: String })
-    category: string; // Категория курса
+    //Связь с категорией через ObjectId
+    @Prop({
+        type: MongooseSchema.Types.ObjectId,
+        ref: 'Category',
+        required: true
+    })
+    categoryId: MongooseSchema.Types.ObjectId; // ID категории
+
+    //Связь с уровнем сложности через ObjectId
+    @Prop({
+        type: MongooseSchema.Types.ObjectId,
+        ref: 'DifficultyLevel',
+        required: true
+    })
+    difficultyLevelId: MongooseSchema.Types.ObjectId; // ID уровня сложности
 
     @Prop({ type: [String], default: [] })
     tags: string[]; // Теги для поиска
-
-    @Prop({ type: String, enum: ['beginner', 'intermediate', 'advanced'], default: 'beginner' })
-    difficulty_level: string; // Уровень сложности
 
     // Статусы курса
     @Prop({ default: false })
@@ -163,12 +172,26 @@ CourseSchema.virtual('teacher', {
     justOne: true
 });
 
+CourseSchema.virtual('category', {
+    ref: 'Category',
+    localField: 'categoryId',
+    foreignField: '_id',
+    justOne: true
+});
+
+CourseSchema.virtual('difficultyLevel', {
+    ref: 'DifficultyLevel',
+    localField: 'difficultyLevelId',
+    foreignField: '_id',
+    justOne: true
+});
+
 // Индексы для оптимизации
 CourseSchema.index({ teacherId: 1 });
+CourseSchema.index({ categoryId: 1 });
+CourseSchema.index({ difficultyLevelId: 1 });
 CourseSchema.index({ isPublished: 1, isActive: 1 });
-CourseSchema.index({ category: 1 });
 CourseSchema.index({ tags: 1 });
-CourseSchema.index({ difficulty_level: 1 });
 CourseSchema.index({ rating: -1 });
 CourseSchema.index({ price: 1 });
 CourseSchema.index({ created_at: -1 });
