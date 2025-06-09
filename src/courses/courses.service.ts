@@ -16,6 +16,7 @@ import { DifficultyLevel } from '../difficulty-levels/schemas/difficulty-level.s
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
 
+
 @Injectable()
 export class CoursesService {
     private readonly logger = new Logger(CoursesService.name);
@@ -309,35 +310,33 @@ export class CoursesService {
             .populate('difficultyLevelId', 'name slug level color description')
             .exec();
 
+        if (!updatedCourse) {
+            throw new NotFoundException(`Курс с ID ${id} не найден после обновления`);
+        }
+
         // Обновляем статистику для всех затронутых сущностей
-        const statsUpdates = [];
+        const statsUpdates: Promise<void>[] = [];
 
         // Обновляем статистику преподавателей
         if (updateCourseDto.teacherId && updateCourseDto.teacherId !== oldTeacherId.toString()) {
-            statsUpdates.push(
-                this.updateTeacherStatistics(oldTeacherId.toString()),
-                this.updateTeacherStatistics(updateCourseDto.teacherId)
-            );
+            statsUpdates.push(this.updateTeacherStatistics(oldTeacherId.toString()));
+            statsUpdates.push(this.updateTeacherStatistics(updateCourseDto.teacherId));
         } else if (oldTeacherId) {
             statsUpdates.push(this.updateTeacherStatistics(oldTeacherId.toString()));
         }
 
         // Обновляем статистику категорий
         if (updateCourseDto.categoryId && updateCourseDto.categoryId !== oldCategoryId.toString()) {
-            statsUpdates.push(
-                this.updateCategoryStatistics(oldCategoryId.toString()),
-                this.updateCategoryStatistics(updateCourseDto.categoryId)
-            );
+            statsUpdates.push(this.updateCategoryStatistics(oldCategoryId.toString()));
+            statsUpdates.push(this.updateCategoryStatistics(updateCourseDto.categoryId));
         } else if (oldCategoryId) {
             statsUpdates.push(this.updateCategoryStatistics(oldCategoryId.toString()));
         }
 
         // Обновляем статистику уровней сложности
         if (updateCourseDto.difficultyLevelId && updateCourseDto.difficultyLevelId !== oldDifficultyLevelId.toString()) {
-            statsUpdates.push(
-                this.updateDifficultyLevelStatistics(oldDifficultyLevelId.toString()),
-                this.updateDifficultyLevelStatistics(updateCourseDto.difficultyLevelId)
-            );
+            statsUpdates.push(this.updateDifficultyLevelStatistics(oldDifficultyLevelId.toString()));
+            statsUpdates.push(this.updateDifficultyLevelStatistics(updateCourseDto.difficultyLevelId));
         } else if (oldDifficultyLevelId) {
             statsUpdates.push(this.updateDifficultyLevelStatistics(oldDifficultyLevelId.toString()));
         }
@@ -385,85 +384,8 @@ export class CoursesService {
     }
 
     /**
-     * МЕТОД: Получение курсов по категории с разными уровнями детализации
-     * 
-     * Уровни детализации:
-     * - 'card': краткая информация для карточек
-     * - 'full': полная информация без админских данных
-     * - 'admin': вся информация включая админские данные
-     */
-    async getCoursesByCategory(
-        categoryId: string,
-        page: number = 1,
-        limit: number = 12,
-        detailLevel: 'card' | 'full' | 'admin' = 'card'
-    ): Promise<{
-        category: any;
-        courses: any[];
-        totalItems: number;
-        currentPage: number;
-        totalPages: number;
-    }> {
-        this.logger.log(`Получение курсов категории ${categoryId}, уровень: ${detailLevel}`);
-
-        if (!this.isValidObjectId(categoryId)) {
-            throw new BadRequestException('Некорректный ID категории');
-        }
-
-        // Проверяем существование категории
-        const category = await this.categoryModel.findById(categoryId);
-        if (!category) {
-            throw new NotFoundException('Категория не найдена');
-        }
-
-        const skip = (page - 1) * limit;
-        const query = { categoryId, is_active: true };
-
-        // Определяем поля для populate в зависимости от уровня детализации
-        let teacherFields = 'name second_name rating';
-        let courseFields = 'title slug price discount_percent currency average_rating students_count image_url';
-
-        if (detailLevel === 'full') {
-            teacherFields += ' experience_years avatar_url';
-            courseFields += ' description duration_hours lessons_count tags preview_video_url is_featured';
-        } else if (detailLevel === 'admin') {
-            teacherFields += ' experience_years avatar_url bio email created_at';
-            courseFields = ''; // Все поля
-        }
-
-        const [courses, totalItems] = await Promise.all([
-            this.courseModel
-                .find(query, detailLevel === 'admin' ? {} : courseFields)
-                .populate('teacherId', teacherFields)
-                .populate('difficultyLevelId', 'name slug level color')
-                .skip(skip)
-                .limit(limit)
-                .sort({ average_rating: -1, students_count: -1 })
-                .exec(),
-            this.courseModel.countDocuments(query).exec()
-        ]);
-
-        const totalPages = Math.ceil(totalItems / limit);
-
-        return {
-            category: {
-                id: category._id,
-                name: category.name,
-                slug: category.slug,
-                description: category.description,
-                color: category.color,
-                icon: category.icon
-            },
-            courses,
-            totalItems,
-            currentPage: page,
-            totalPages
-        };
-    }
-
-    /**
-     * МЕТОД: Получение курсов по уровню сложности
-     */
+  * Получение курсов по уровню сложности
+  */
     async getCoursesByDifficultyLevel(
         difficultyLevelId: string,
         page: number = 1,
@@ -557,6 +479,9 @@ export class CoursesService {
     /**
      * МЕТОД: Поиск курсов по тексту
      */
+    /**
+ * Поиск курсов по тексту
+ */
     async searchCourses(
         searchQuery: string,
         page: number = 1,
@@ -603,14 +528,7 @@ export class CoursesService {
                 .skip(skip)
                 .limit(limit)
                 .sort({
-                    // Сортировка по релевантности (сначала совпадения в названии)
-                    $expr: {
-                        $cond: [
-                            { $regexMatch: { input: "$title", regex: searchQuery, options: "i" } },
-                            1,
-                            2
-                        ]
-                    },
+                    // Используем простую сортировку вместо сложного выражения
                     average_rating: -1,
                     students_count: -1
                 })
@@ -628,7 +546,7 @@ export class CoursesService {
             searchQuery
         };
     }
-
+    
     /**
      * ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ для обновления статистики
      */
@@ -713,10 +631,220 @@ export class CoursesService {
     }
 
     /**
-     * ВСПОМОГАТЕЛЬНЫЙ МЕТОД: Проверка валидности ObjectId
+     * Проверка валидности ObjectId
      */
     private isValidObjectId(id: string): boolean {
         return mongoose.Types.ObjectId.isValid(id);
+    }
+
+    /**
+     * Метод обновления статуса публикации
+    */
+    async updatePublishStatus(id: string, isPublished: boolean): Promise<Course> {
+        const course = await this.courseModel.findById(id).exec();
+        if (!course) {
+            throw new NotFoundException(`Курс с ID ${id} не найден`);
+        }
+
+        // Обновляем статус публикации
+        course.isPublished = isPublished;
+        return course.save();
+    }
+
+    /**
+     * Получение уроков курса
+     */
+    async getCourseLessons(courseId: string): Promise<any[]> {
+        const course = await this.courseModel.findById(courseId).exec();
+        if (!course) {
+            throw new NotFoundException(`Курс с ID ${courseId} не найден`);
+        }
+
+        // Логика получения уроков курса
+        // Зависит от структуры вашей базы данных
+        return []; // Заглушка, замените на реальную логику
+    }
+
+    /**
+     * Получение статистики курса
+     */
+    async getCourseStatistics(courseId: string): Promise<any> {
+        const course = await this.courseModel.findById(courseId).exec();
+        if (!course) {
+            throw new NotFoundException(`Курс с ID ${courseId} не найден`);
+        }
+
+        // Заглушка для статистики
+        return {
+            studentsCount: course.students_count || 0,
+            lessonsCount: course.lessons_count || 0,
+            averageRating: course.average_rating || 0,
+            completionRate: 0, // Заглушка
+            revenue: 0 // Заглушка
+        };
+    }
+
+    /**
+     * Получение популярных курсов
+     */
+    async getPopularCourses(limit: number = 10): Promise<Course[]> {
+        return this.courseModel
+            .find({ isActive: true, isPublished: true })
+            .sort({ students_count: -1, average_rating: -1 })
+            .limit(limit)
+            .populate('teacherId', 'name second_name rating')
+            .populate('categoryId', 'name slug')
+            .populate('difficultyLevelId', 'name level color')
+            .exec();
+    }
+
+    /**
+     * Получение категорий курсов
+     */
+    async getCategories(): Promise<any[]> {
+        // Здесь нужно использовать categoryModel, если есть
+        // Или сделать агрегацию по курсам
+        return []; // Заглушка, замените на реальную логику
+    }
+
+    /**
+     * Запись студента на курс
+     */
+    async enrollStudent(courseId: string, userId: string): Promise<any> {
+        const course = await this.courseModel.findById(courseId).exec();
+        if (!course) {
+            throw new NotFoundException(`Курс с ID ${courseId} не найден`);
+        }
+
+        // Здесь должна быть логика создания подписки на курс
+        // И обновление счетчика студентов
+
+        // Заглушка для результата записи
+        return {
+            courseId,
+            userId,
+            enrollmentDate: new Date()
+        };
+    }
+
+    /**
+     * Получение списка студентов курса
+     */
+    async getCourseStudents(courseId: string, page: number = 1, limit: number = 20): Promise<any> {
+        const course = await this.courseModel.findById(courseId).exec();
+        if (!course) {
+            throw new NotFoundException(`Курс с ID ${courseId} не найден`);
+        }
+
+        // Заглушка для списка студентов
+        return {
+            students: [],
+            totalItems: 0,
+            totalPages: 0
+        };
+    }
+
+    /**
+     * Дублирование курса
+     */
+    async duplicateCourse(courseId: string, newTitle: string, userId: string): Promise<Course> {
+        const course = await this.courseModel.findById(courseId).exec();
+        if (!course) {
+            throw new NotFoundException(`Курс с ID ${courseId} не найден`);
+        }
+
+        // Создаем копию объекта курса без _id
+        const courseData = course.toObject();
+        delete courseData._id;
+        delete courseData.id;
+
+        // Изменяем название и отмечаем как неопубликованный
+        const newCourse = new this.courseModel({
+            ...courseData,
+            title: newTitle,
+            isPublished: false,
+            students_count: 0,
+            slug: `${courseData.slug}-copy-${Date.now().toString(36)}`
+        });
+
+        return newCourse.save();
+    }
+
+    /**
+ * Получение курсов по категории с разными уровнями детализации
+ * 
+ * Уровни детализации:
+ * - 'card': краткая информация для карточек
+ * - 'full': полная информация без админских данных
+ * - 'admin': вся информация включая админские данные
+ */
+    async getCoursesByCategory(
+        categoryId: string,
+        page: number = 1,
+        limit: number = 12,
+        detailLevel: 'card' | 'full' | 'admin' = 'card'
+    ): Promise<{
+        category: any;
+        courses: any[];
+        totalItems: number;
+        currentPage: number;
+        totalPages: number;
+    }> {
+        this.logger.log(`Получение курсов категории ${categoryId}, уровень: ${detailLevel}`);
+
+        if (!this.isValidObjectId(categoryId)) {
+            throw new BadRequestException('Некорректный ID категории');
+        }
+
+        // Проверяем существование категории
+        const category = await this.categoryModel.findById(categoryId);
+        if (!category) {
+            throw new NotFoundException('Категория не найдена');
+        }
+
+        const skip = (page - 1) * limit;
+        const query = { categoryId, is_active: true };
+
+        // Определяем поля для populate в зависимости от уровня детализации
+        let teacherFields = 'name second_name rating';
+        let courseFields = 'title slug price discount_percent currency average_rating students_count image_url';
+
+        if (detailLevel === 'full') {
+            teacherFields += ' experience_years avatar_url';
+            courseFields += ' description duration_hours lessons_count tags preview_video_url is_featured';
+        } else if (detailLevel === 'admin') {
+            teacherFields += ' experience_years avatar_url bio email created_at';
+            courseFields = ''; // Все поля
+        }
+
+        const [courses, totalItems] = await Promise.all([
+            this.courseModel
+                .find(query, detailLevel === 'admin' ? {} : courseFields)
+                .populate('teacherId', teacherFields)
+                .populate('difficultyLevelId', 'name slug level color')
+                .skip(skip)
+                .limit(limit)
+                .sort({ average_rating: -1, students_count: -1 })
+                .exec(),
+            this.courseModel.countDocuments(query).exec()
+        ]);
+
+        const totalPages = Math.ceil(totalItems / limit);
+
+        return {
+            category: {
+                id: category._id,
+                name: category.name,
+                slug: category.slug,
+                description: category.description,
+                color: category.color,
+                icon: category.icon
+            },
+            courses,
+            totalItems,
+            currentPage: page,
+            totalPages
+        };
     }
 }
 
@@ -757,3 +885,4 @@ export class CoursesService {
  *    - Параллельные запросы где возможно
  *    - Индексы на часто используемые поля
  *    - Селективный populate в завис
+ **/

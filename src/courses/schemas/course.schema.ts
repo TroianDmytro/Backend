@@ -36,6 +36,9 @@ export class Course {
     @Prop({ default: false })
     is_featured: boolean; // Рекомендуемый курс
 
+    @Prop({ default: false })
+    isPublished: boolean;// Статус публикации курса
+
     @Prop({ min: 0, default: 0 })
     duration_hours: number; // Продолжительность в часах
 

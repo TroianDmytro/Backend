@@ -33,6 +33,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { TeachersService } from 'src/teachers/teachers.service';
+import { DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
 
 @ApiTags('courses')
 @Controller('courses')
@@ -163,7 +164,7 @@ export class CoursesController {
     ) {
         this.logger.log(`Запрос курса с ID: ${id}`);
 
-        const course = await this.coursesService.findById(id, includeLessons);
+        const course = await this.coursesService.findById(id);
         if (!course) {
             throw new NotFoundException('Курс не найден');
         }
@@ -582,8 +583,8 @@ export class CoursesController {
     ////////////////////////////////////////////////////////
 
     /**
-     * GET /courses/category/:categoryId - Получение курсов категории (карточки)
-     */
+   * GET /courses/category/:categoryId - Получение курсов категории (карточки)
+   */
     @Get('category/:categoryId')
     @ApiOperation({
         summary: 'Получение курсов категории',

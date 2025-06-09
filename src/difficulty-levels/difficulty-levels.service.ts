@@ -8,6 +8,7 @@ import { Subscription, SubscriptionDocument } from '../subscriptions/schemas/sub
 import { CreateDifficultyLevelDto } from './dto/create-difficulty-level.dto';
 import { UpdateDifficultyLevelDto } from './dto/update-difficulty-level.dto';
 
+
 @Injectable()
 export class DifficultyLevelsService {
     private readonly logger = new Logger(DifficultyLevelsService.name);
@@ -237,8 +238,8 @@ export class DifficultyLevelsService {
     }
 
     /**
-     * Получение курсов по уровню сложности (краткая информация)
-     */
+ * Получение курсов уровня сложности (краткая информация)
+ */
     async getLevelCourses(
         levelId: string,
         page: number = 1,
@@ -266,12 +267,12 @@ export class DifficultyLevelsService {
         const [courses, totalItems] = await Promise.all([
             this.courseModel
                 .find(filter)
-                .select('title short_description logo_url price discount_price currency rating reviews_count current_students_count duration_hours lessons_count')
+                .select('title description image_url price discount_percent currency average_rating reviews_count students_count duration_hours lessons_count')
                 .populate('teacherId', 'name second_name rating')
                 .populate('categoryId', 'name slug')
                 .skip(skip)
                 .limit(limit)
-                .sort({ rating: -1, current_students_count: -1 })
+                .sort({ average_rating: -1, students_count: -1 })
                 .exec(),
             this.courseModel.countDocuments(filter).exec()
         ]);
@@ -282,14 +283,14 @@ export class DifficultyLevelsService {
         const courseCards = courses.map(course => ({
             id: course.id,
             title: course.title,
-            short_description: course.short_description,
-            logo_url: course.logo_url,
+            description: course.description, // Вместо short_description
+            image_url: course.image_url, // Вместо logo_url
             price: course.price,
-            discount_price: course.discount_price,
+            discount_percent: course.discount_percent, // Вместо discount_price
             currency: course.currency,
-            rating: course.rating,
+            average_rating: course.average_rating, // Вместо rating
             reviews_count: course.reviews_count,
-            current_students_count: course.current_students_count,
+            students_count: course.students_count, // Вместо current_students_count
             duration_hours: course.duration_hours,
             lessons_count: course.lessons_count,
             category: course.categoryId ? {
@@ -336,7 +337,7 @@ export class DifficultyLevelsService {
 
         const courseIds = courses.map(c => c._id);
         const studentsCount = courses.reduce((sum, course) => {
-            return sum + (course.current_students_count || 0);
+            return sum + (course.students_count || 0);
         }, 0);
 
         // Подсчитываем средний процент завершения
@@ -390,15 +391,15 @@ export class DifficultyLevelsService {
     }
 
     /**
-     * Получение статистики по уровням
-     */
+ * Получение статистики по уровням
+ */
     async getLevelsStatistics(): Promise<any[]> {
         const levels = await this.difficultyLevelModel
             .find({ isActive: true })
             .sort({ level: 1 })
             .exec();
 
-        const statistics = [];
+        const statistics: any[] = []; // Явно указываем тип массива
 
         for (const level of levels) {
             const coursesByCategory = await this.courseModel.aggregate([
@@ -434,6 +435,7 @@ export class DifficultyLevelsService {
                 }
             ]).exec();
 
+            // Используем явное приведение типа для обхода ошибки типа
             statistics.push({
                 level: {
                     id: level.id,
@@ -445,7 +447,7 @@ export class DifficultyLevelsService {
                 studentsCount: level.students_count,
                 averageCompletionRate: level.average_completion_rate,
                 coursesByCategory
-            });
+            } as any);
         }
 
         return statistics;
