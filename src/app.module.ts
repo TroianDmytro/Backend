@@ -12,6 +12,8 @@ import { TeachersModule } from './teachers/teachers.module';
 import { CoursesModule } from './courses/courses.module';
 import { LessonsModule } from './lessons/lessons.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
+import { CategoriesModule } from './categories/categories.module';
+import { DifficultyLevelsModule } from './difficulty-levels/difficulty-levels.module';
 
 @Module({
   imports: [
@@ -33,6 +35,8 @@ import { SubscriptionsModule } from './subscriptions/subscriptions.module';
     AuthModule,
     AvatarsModule,
     TeachersModule, // Модуль преподавателей
+    CategoriesModule, // Модуль категорий курсов
+    DifficultyLevelsModule, // Модуль уровней сложности
     CoursesModule,  // Модуль курсов
     LessonsModule,  // Модуль уроков
     SubscriptionsModule // Модуль подписок

@@ -578,4 +578,321 @@ export class CoursesController {
             duplicatedCourse: duplicatedCourse
         };
     }
+
+    ////////////////////////////////////////////////////////
+
+    /**
+     * GET /courses/category/:categoryId - Получение курсов категории (карточки)
+     */
+    @Get('category/:categoryId')
+    @ApiOperation({
+        summary: 'Получение курсов категории',
+        description: 'Возвращает курсы указанной категории с краткой информацией для карточек'
+    })
+    @ApiParam({ name: 'categoryId', description: 'ID категории' })
+    @ApiQuery({
+        name: 'page',
+        required: false,
+        type: Number,
+        description: 'Номер страницы (по умолчанию 1)'
+    })
+    @ApiQuery({
+        name: 'limit',
+        required: false,
+        type: Number,
+        description: 'Количество элементов на странице (по умолчанию 12)'
+    })
+    @ApiResponse({
+        status: 200,
+        description: 'Список курсов категории'
+    })
+    @ApiResponse({ status: 404, description: 'Категория не найдена' })
+    async getCoursesByCategory(
+        @Param('categoryId') categoryId: string,
+        @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+        @Query('limit', new DefaultValuePipe(12), ParseIntPipe) limit: number
+    ) {
+        this.logger.log(`Получение курсов категории ${categoryId}. Страница: ${page}, Лимит: ${limit}`);
+
+        const result = await this.coursesService.getCoursesByCategory(categoryId, page, limit, 'card');
+
+        return {
+            category: result.category,
+            courses: result.courses,
+            pagination: {
+                currentPage: result.currentPage,
+                totalPages: result.totalPages,
+                totalItems: result.totalItems,
+                itemsPerPage: limit
+            }
+        };
+    }
+
+    /**
+     * GET /courses/category/:categoryId/full - Получение курсов категории (полная информация)
+     */
+    @Get('category/:categoryId/full')
+    @ApiOperation({
+        summary: 'Получение курсов категории с полной информацией',
+        description: 'Возвращает курсы категории с подробной информацией (без админских данных)'
+    })
+    @ApiParam({ name: 'categoryId', description: 'ID категории' })
+    @ApiQuery({
+        name: 'page',
+        required: false,
+        type: Number,
+        description: 'Номер страницы (по умолчанию 1)'
+    })
+    @ApiQuery({
+        name: 'limit',
+        required: false,
+        type: Number,
+        description: 'Количество элементов на странице (по умолчанию 12)'
+    })
+    @ApiResponse({
+        status: 200,
+        description: 'Список курсов категории с полной информацией'
+    })
+    @ApiResponse({ status: 404, description: 'Категория не найдена' })
+    async getCoursesByCategoryFull(
+        @Param('categoryId') categoryId: string,
+        @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+        @Query('limit', new DefaultValuePipe(12), ParseIntPipe) limit: number
+    ) {
+        this.logger.log(`Получение полных данных курсов категории ${categoryId}`);
+
+        const result = await this.coursesService.getCoursesByCategory(categoryId, page, limit, 'full');
+
+        return {
+            category: result.category,
+            courses: result.courses,
+            pagination: {
+                currentPage: result.currentPage,
+                totalPages: result.totalPages,
+                totalItems: result.totalItems,
+                itemsPerPage: limit
+            }
+        };
+    }
+
+    /**
+     * GET /courses/category/:categoryId/admin - Получение курсов категории (админская информация)
+     */
+    @Get('category/:categoryId/admin')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin', 'owner')
+    @ApiBearerAuth()
+    @ApiOperation({
+        summary: 'Получение курсов категории со всей информацией',
+        description: 'Возвращает курсы категории со всей информацией (только для админов и владельцев)'
+    })
+    @ApiParam({ name: 'categoryId', description: 'ID категории' })
+    @ApiQuery({
+        name: 'page',
+        required: false,
+        type: Number,
+        description: 'Номер страницы (по умолчанию 1)'
+    })
+    @ApiQuery({
+        name: 'limit',
+        required: false,
+        type: Number,
+        description: 'Количество элементов на странице (по умолчанию 12)'
+    })
+    @ApiResponse({
+        status: 200,
+        description: 'Список курсов категории со всей информацией'
+    })
+    @ApiResponse({ status: 404, description: 'Категория не найдена' })
+    async getCoursesByCategoryAdmin(
+        @Param('categoryId') categoryId: string,
+        @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+        @Query('limit', new DefaultValuePipe(12), ParseIntPipe) limit: number
+    ) {
+        this.logger.log(`Получение админских данных курсов категории ${categoryId}`);
+
+        const result = await this.coursesService.getCoursesByCategory(categoryId, page, limit, 'admin');
+
+        return {
+            category: result.category,
+            courses: result.courses,
+            pagination: {
+                currentPage: result.currentPage,
+                totalPages: result.totalPages,
+                totalItems: result.totalItems,
+                itemsPerPage: limit
+            }
+        };
+    }
+
+    /**
+     * GET /courses/difficulty/:difficultyLevelId - Получение курсов по уровню сложности (карточки)
+     */
+    @Get('difficulty/:difficultyLevelId')
+    @ApiOperation({
+        summary: 'Получение курсов по уровню сложности',
+        description: 'Возвращает курсы указанного уровня сложности с краткой информацией для карточек'
+    })
+    @ApiParam({ name: 'difficultyLevelId', description: 'ID уровня сложности' })
+    @ApiQuery({
+        name: 'page',
+        required: false,
+        type: Number,
+        description: 'Номер страницы (по умолчанию 1)'
+    })
+    @ApiQuery({
+        name: 'limit',
+        required: false,
+        type: Number,
+        description: 'Количество элементов на странице (по умолчанию 12)'
+    })
+    @ApiResponse({
+        status: 200,
+        description: 'Список курсов уровня сложности'
+    })
+    @ApiResponse({ status: 404, description: 'Уровень сложности не найден' })
+    async getCoursesByDifficultyLevel(
+        @Param('difficultyLevelId') difficultyLevelId: string,
+        @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+        @Query('limit', new DefaultValuePipe(12), ParseIntPipe) limit: number
+    ) {
+        this.logger.log(`Получение курсов уровня сложности ${difficultyLevelId}. Страница: ${page}, Лимит: ${limit}`);
+
+        const result = await this.coursesService.getCoursesByDifficultyLevel(difficultyLevelId, page, limit, 'card');
+
+        return {
+            difficultyLevel: result.difficultyLevel,
+            courses: result.courses,
+            pagination: {
+                currentPage: result.currentPage,
+                totalPages: result.totalPages,
+                totalItems: result.totalItems,
+                itemsPerPage: limit
+            }
+        };
+    }
+
+    /**
+     * GET /courses/difficulty/:difficultyLevelId/full - Получение курсов по уровню сложности (полная информация)
+     */
+    @Get('difficulty/:difficultyLevelId/full')
+    @ApiOperation({
+        summary: 'Получение курсов по уровню сложности с полной информацией',
+        description: 'Возвращает курсы уровня сложности с подробной информацией (без админских данных)'
+    })
+    @ApiParam({ name: 'difficultyLevelId', description: 'ID уровня сложности' })
+    @ApiQuery({
+        name: 'page',
+        required: false,
+        type: Number,
+        description: 'Номер страницы (по умолчанию 1)'
+    })
+    @ApiQuery({
+        name: 'limit',
+        required: false,
+        type: Number,
+        description: 'Количество элементов на странице (по умолчанию 12)'
+    })
+    @ApiResponse({
+        status: 200,
+        description: 'Список курсов уровня сложности с полной информацией'
+    })
+    @ApiResponse({ status: 404, description: 'Уровень сложности не найден' })
+    async getCoursesByDifficultyLevelFull(
+        @Param('difficultyLevelId') difficultyLevelId: string,
+        @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+        @Query('limit', new DefaultValuePipe(12), ParseIntPipe) limit: number
+    ) {
+        this.logger.log(`Получение полных данных курсов уровня сложности ${difficultyLevelId}`);
+
+        const result = await this.coursesService.getCoursesByDifficultyLevel(difficultyLevelId, page, limit, 'full');
+
+        return {
+            difficultyLevel: result.difficultyLevel,
+            courses: result.courses,
+            pagination: {
+                currentPage: result.currentPage,
+                totalPages: result.totalPages,
+                totalItems: result.totalItems,
+                itemsPerPage: limit
+            }
+        };
+    }
+
+    /**
+     * GET /courses/difficulty/:difficultyLevelId/admin - Получение курсов по уровню сложности (админская информация)
+     */
+    @Get('difficulty/:difficultyLevelId/admin')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin', 'owner')
+    @ApiBearerAuth()
+    @ApiOperation({
+        summary: 'Получение курсов по уровню сложности со всей информацией',
+        description: 'Возвращает курсы уровня сложности со всей информацией (только для админов и владельцев)'
+    })
+    @ApiParam({ name: 'difficultyLevelId', description: 'ID уровня сложности' })
+    @ApiQuery({
+        name: 'page',
+        required: false,
+        type: Number,
+        description: 'Номер страницы (по умолчанию 1)'
+    })
+    @ApiQuery({
+        name: 'limit',
+        required: false,
+        type: Number,
+        description: 'Количество элементов на странице (по умолчанию 12)'
+    })
+    @ApiResponse({
+        status: 200,
+        description: 'Список курсов уровня сложности со всей информацией'
+    })
+    @ApiResponse({ status: 404, description: 'Уровень сложности не найден' })
+    async getCoursesByDifficultyLevelAdmin(
+        @Param('difficultyLevelId') difficultyLevelId: string,
+        @Query('page', new DefaultValuePipe(1), ParseIntPipe) page: number,
+        @Query('limit', new DefaultValuePipe(12), ParseIntPipe) limit: number
+    ) {
+        this.logger.log(`Получение админских данных курсов уровня сложности ${difficultyLevelId}`);
+
+        const result = await this.coursesService.getCoursesByDifficultyLevel(difficultyLevelId, page, limit, 'admin');
+
+        return {
+            difficultyLevel: result.difficultyLevel,
+            courses: result.courses,
+            pagination: {
+                currentPage: result.currentPage,
+                totalPages: result.totalPages,
+                totalItems: result.totalItems,
+                itemsPerPage: limit
+            }
+        };
+    }
+
+    /**
+     * Объяснение новых эндпоинтов курсов:
+     * 
+     * 1. **Структура маршрутов по категориям:**
+     *    - GET /courses/category/:categoryId - карточки курсов
+     *    - GET /courses/category/:categoryId/full - полная информация
+     *    - GET /courses/category/:categoryId/admin - админская информация
+     * 
+     * 2. **Структура маршрутов по уровням сложности:**
+     *    - GET /courses/difficulty/:difficultyLevelId - карточки курсов
+     *    - GET /courses/difficulty/:difficultyLevelId/full - полная информация
+     *    - GET /courses/difficulty/:difficultyLevelId/admin - админская информация
+     * 
+     * 3. **Три уровня детализации:**
+     *    - 'card' - краткая информация для карточек (публичный доступ)
+     *    - 'full' - подробная информация без админских данных (публичный доступ)
+     *    - 'admin' - вся информация включая админские данные (только админы/владельцы)
+     * 
+     * 4. **Пагинация:**
+     *    - Все эндпоинты поддерживают пагинацию
+     *    - По умолчанию: page=1, limit=12
+     * 
+     * 5. **Авторизация:**
+     *    - Админские эндпоинты требуют JWT + роль admin/owner
+     *    - Публичные эндпоинты доступны всем
+     */
 }

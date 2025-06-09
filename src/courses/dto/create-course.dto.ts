@@ -1,27 +1,38 @@
 // src/courses/dto/create-course.dto.ts
+import { ApiProperty } from '@nestjs/swagger';
 import {
-    IsNotEmpty,
     IsString,
-    IsNumber,
+    IsNotEmpty,
     IsOptional,
+    IsNumber,
+    IsBoolean,
     IsArray,
     IsUrl,
     IsEnum,
-    IsBoolean,
-    IsMongoId,
     Min,
-    IsDateString
+    Max,
+    IsMongoId
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateCourseDto {
-    @ApiProperty({ example: 'Основы веб-разработки', description: 'Название курса' })
+    @ApiProperty({
+        example: 'Основы JavaScript для начинающих',
+        description: 'Название курса'
+    })
     @IsString()
     @IsNotEmpty()
     title: string;
 
     @ApiProperty({
-        example: 'Полный курс по изучению веб-разработки с нуля до профессионального уровня',
+        example: 'javascript-basics-for-beginners',
+        description: 'URL-дружелюбный идентификатор курса'
+    })
+    @IsString()
+    @IsNotEmpty()
+    slug: string;
+
+    @ApiProperty({
+        example: 'Полный курс по изучению JavaScript с нуля',
         description: 'Описание курса'
     })
     @IsString()
@@ -29,56 +40,107 @@ export class CreateCourseDto {
     description: string;
 
     @ApiProperty({
-        example: 'Изучите веб-разработку с нуля',
-        description: 'Краткое описание для карточек',
-        required: false
-    })
-    @IsString()
-    @IsOptional()
-    short_description?: string;
-
-    @ApiProperty({
-        example: 'https://example.com/logo.png',
-        description: 'URL логотипа курса',
+        example: 'https://example.com/course-image.jpg',
+        description: 'URL изображения курса',
         required: false
     })
     @IsUrl()
     @IsOptional()
-    logo_url?: string;
+    image_url?: string;
 
     @ApiProperty({
-        example: 'https://example.com/cover.jpg',
-        description: 'URL обложки курса',
-        required: false
+        example: 99.99,
+        description: 'Цена курса'
     })
-    @IsUrl()
-    @IsOptional()
-    cover_image_url?: string;
-
-    @ApiProperty({ example: 299.99, description: 'Цена курса' })
     @IsNumber()
     @Min(0)
     price: number;
 
     @ApiProperty({
-        example: 199.99,
-        description: 'Цена со скидкой',
+        example: 15,
+        description: 'Процент скидки (0-100)',
+        required: false,
+        minimum: 0,
+        maximum: 100
+    })
+    @IsNumber()
+    @Min(0)
+    @Max(100)
+    @IsOptional()
+    discount_percent?: number;
+
+    @ApiProperty({
+        example: 'USD',
+        description: 'Валюта курса',
+        enum: ['USD', 'EUR', 'UAH', 'RUB']
+    })
+    @IsEnum(['USD', 'EUR', 'UAH', 'RUB'])
+    currency: string;
+
+    @ApiProperty({
+        example: true,
+        description: 'Активен ли курс',
+        required: false
+    })
+    @IsBoolean()
+    @IsOptional()
+    is_active?: boolean;
+
+    @ApiProperty({
+        example: false,
+        description: 'Рекомендуемый курс',
+        required: false
+    })
+    @IsBoolean()
+    @IsOptional()
+    is_featured?: boolean;
+
+    @ApiProperty({
+        example: 40,
+        description: 'Продолжительность курса в часах',
         required: false
     })
     @IsNumber()
     @Min(0)
     @IsOptional()
-    discount_price?: number;
+    duration_hours?: number;
 
     @ApiProperty({
-        example: 'USD',
-        description: 'Валюта',
-        enum: ['USD', 'EUR', 'UAH'],
-        default: 'USD'
+        example: ['javascript', 'programming', 'web-development'],
+        description: 'Теги курса',
+        required: false
     })
-    @IsEnum(['USD', 'EUR', 'UAH'])
+    @IsArray()
+    @IsString({ each: true })
     @IsOptional()
-    currency?: string;
+    tags?: string[];
+
+    @ApiProperty({
+        example: 'https://example.com/preview-video.mp4',
+        description: 'URL превью видео',
+        required: false
+    })
+    @IsUrl()
+    @IsOptional()
+    preview_video_url?: string;
+
+    @ApiProperty({
+        example: true,
+        description: 'Разрешены ли комментарии',
+        required: false
+    })
+    @IsBoolean()
+    @IsOptional()
+    allow_comments?: boolean;
+
+    @ApiProperty({
+        example: false,
+        description: 'Требует ли курс подтверждения для записи',
+        required: false
+    })
+    @IsBoolean()
+    @IsOptional()
+    requires_approval?: boolean;
 
     @ApiProperty({
         example: '507f1f77bcf86cd799439011',
@@ -88,124 +150,45 @@ export class CreateCourseDto {
     @IsNotEmpty()
     teacherId: string;
 
+    // НОВЫЕ ОБЯЗАТЕЛЬНЫЕ ПОЛЯ для связей
     @ApiProperty({
-        example: 'Программирование',
-        description: 'Категория курса',
-        required: false
+        example: '507f1f77bcf86cd799439012',
+        description: 'ID категории курса'
     })
-    @IsString()
-    @IsOptional()
-    category?: string;
+    @IsMongoId()
+    @IsNotEmpty()
+    categoryId: string;
 
     @ApiProperty({
-        example: ['JavaScript', 'React', 'Frontend'],
-        description: 'Теги для поиска',
-        required: false
+        example: '507f1f77bcf86cd799439013',
+        description: 'ID уровня сложности курса'
     })
-    @IsArray()
-    @IsOptional()
-    tags?: string[];
-
-    @ApiProperty({
-        example: 'beginner',
-        description: 'Уровень сложности',
-        enum: ['beginner', 'intermediate', 'advanced'],
-        default: 'beginner'
-    })
-    @IsEnum(['beginner', 'intermediate', 'advanced'])
-    @IsOptional()
-    difficulty_level?: string;
-
-    @ApiProperty({
-        example: 40,
-        description: 'Продолжительность в часах',
-        required: false
-    })
-    @IsNumber()
-    @Min(0)
-    @IsOptional()
-    duration_hours?: number;
-
-    @ApiProperty({
-        example: 100,
-        description: 'Максимальное количество студентов (0 = без ограничений)',
-        required: false
-    })
-    @IsNumber()
-    @Min(0)
-    @IsOptional()
-    max_students?: number;
-
-    @ApiProperty({
-        example: ['Базовые знания HTML', 'Умение работать с компьютером'],
-        description: 'Предварительные требования',
-        required: false
-    })
-    @IsArray()
-    @IsOptional()
-    prerequisites?: string[];
-
-    @ApiProperty({
-        example: ['Создание сайтов', 'Работа с JavaScript', 'Использование React'],
-        description: 'Что изучит студент',
-        required: false
-    })
-    @IsArray()
-    @IsOptional()
-    learning_outcomes?: string[];
-
-    @ApiProperty({
-        example: 'ru',
-        description: 'Язык курса',
-        required: false
-    })
-    @IsString()
-    @IsOptional()
-    language?: string;
-
-    @ApiProperty({
-        example: true,
-        description: 'Выдается ли сертификат',
-        required: false
-    })
-    @IsBoolean()
-    @IsOptional()
-    has_certificate?: boolean;
-
-    @ApiProperty({
-        example: 'https://youtube.com/watch?v=abc123',
-        description: 'Промо-видео курса',
-        required: false
-    })
-    @IsUrl()
-    @IsOptional()
-    promo_video_url?: string;
-
-    @ApiProperty({
-        example: ['Начинающие разработчики', 'Студенты IT'],
-        description: 'Целевая аудитория',
-        required: false
-    })
-    @IsArray()
-    @IsOptional()
-    target_audience?: string[];
-
-    @ApiProperty({
-        example: '2024-01-15',
-        description: 'Дата начала курса',
-        required: false
-    })
-    @IsDateString()
-    @IsOptional()
-    start_date?: string;
-
-    @ApiProperty({
-        example: '2024-06-15',
-        description: 'Дата окончания курса',
-        required: false
-    })
-    @IsDateString()
-    @IsOptional()
-    end_date?: string;
+    @IsMongoId()
+    @IsNotEmpty()
+    difficultyLevelId: string;
 }
 
+/**
+ * Объяснение изменений в CreateCourseDto:
+ * 
+ * 1. **УДАЛЕННЫЕ ПОЛЯ:**
+ *    - category?: string → удалено
+ *    - difficulty_level?: string → удалено
+ * 
+ * 2. **НОВЫЕ ОБЯЗАТЕЛЬНЫЕ ПОЛЯ:**
+ *    - categoryId: string - ID категории (обязательное поле)
+ *    - difficultyLevelId: string - ID уровня сложности (обязательное поле)
+ * 
+ * 3. **ВАЛИДАЦИЯ:**
+ *    - @IsMongoId() - проверяет корректность ObjectId
+ *    - @IsNotEmpty() - поля обязательны для заполнения
+ * 
+ * 4. **ПРЕИМУЩЕСТВА:**
+ *    - Строгая типизация связей
+ *    - Валидация существования связанных документов
+ *    - Предотвращение создания курсов с несуществующими категориями/уровнями
+ * 
+ * 5. **ИСПОЛЬЗОВАНИЕ:**
+ *    - При создании курса нужно передать существующие ID категории и уровня
+ *    - Валидация происходит на уровне DTO и в сервисе
+ */

@@ -11,6 +11,10 @@ import { TeachersModule } from 'src/teachers/teachers.module';
 import { LessonsModule } from 'src/lessons/lessons.module';
 import { SubscriptionsModule } from 'src/subscriptions/subscriptions.module';
 import { TeachersService } from 'src/teachers/teachers.service';
+import { Category, CategorySchema } from '../categories/schemas/category.schema';
+import { DifficultyLevel, DifficultyLevelSchema } from '../difficulty-levels/schemas/difficulty-level.schema';
+import { CategoriesModule } from 'src/categories/categories.module';
+import { DifficultyLevelsModule } from 'src/difficulty-levels/difficulty-levels.module';
 
 @Module({
     imports: [
@@ -18,11 +22,15 @@ import { TeachersService } from 'src/teachers/teachers.service';
             { name: Course.name, schema: CourseSchema },
             { name: Teacher.name, schema: TeacherSchema },
             { name: Lesson.name, schema: LessonSchema },
-            { name: Subscription.name, schema: SubscriptionSchema }
+            { name: Subscription.name, schema: SubscriptionSchema },
+             { name: Category.name, schema: CategorySchema },
+            { name: DifficultyLevel.name, schema: DifficultyLevelSchema }
         ]),
-        forwardRef(() => TeachersModule), // Добавим когда потребуется избежать циклической зависимости
+        forwardRef(() => TeachersModule), 
         forwardRef(() => LessonsModule),
-        forwardRef(() => SubscriptionsModule)
+        forwardRef(() => SubscriptionsModule),
+        forwardRef(() => CategoriesModule),
+        forwardRef(() => DifficultyLevelsModule)
     ],
     controllers: [CoursesController],
     providers: [CoursesService],
