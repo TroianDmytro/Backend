@@ -104,6 +104,34 @@ export class UpdateCourseDto {
     @IsMongoId()
     @IsOptional()
     difficultyLevelId?: string;
+
+    @ApiProperty({
+        example: 'Обновленное краткое описание',
+        description: 'Краткое описание курса',
+        required: false
+    })
+    @IsString()
+    @IsOptional()
+    short_description?: string;
+
+    @ApiProperty({
+        example: 'https://example.com/new-logo.png',
+        description: 'URL логотипа курса',
+        required: false
+    })
+    @IsUrl()
+    @IsOptional()
+    logo_url?: string;
+
+    @ApiProperty({
+        example: 150,
+        description: 'Максимальное количество студентов',
+        required: false
+    })
+    @IsNumber()
+    @Min(0)
+    @IsOptional()
+    max_students?: number;
 }
 
 /**

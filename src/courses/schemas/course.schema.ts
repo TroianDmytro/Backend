@@ -83,6 +83,24 @@ export class Course {
     })
     difficultyLevelId: MongooseSchema.Types.ObjectId; // ID уровня сложности
 
+    @Prop({ required: false })
+    short_description: string;
+
+    @Prop({ required: false })
+    logo_url: string;
+
+    @Prop({ default: 0, min: 0, max: 5 })
+    rating: number;
+
+    @Prop({ default: 0, min: 0 })
+    current_students_count: number; // 0 означает без ограничений
+
+     @Prop({ default: 0, min: 0 }) // 0 означает без ограничений
+    max_students: number;
+    
+    @Prop({ default: 'beginner', enum: ['beginner', 'intermediate', 'advanced'] })
+    level: string;
+
     // Статистические поля (обновляются автоматически)
     @Prop({ min: 0, default: 0 })
     students_count: number; // Количество студентов

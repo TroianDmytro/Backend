@@ -166,6 +166,34 @@ export class CreateCourseDto {
     @IsMongoId()
     @IsNotEmpty()
     difficultyLevelId: string;
+
+    @ApiProperty({
+        example: 'Изучите JavaScript с нуля за 30 дней',
+        description: 'Краткое описание курса',
+        required: false
+    })
+    @IsString()
+    @IsOptional()
+    short_description?: string;
+
+    @ApiProperty({
+        example: 'https://example.com/logo.png',
+        description: 'URL логотипа курса',
+        required: false
+    })
+    @IsUrl()
+    @IsOptional()
+    logo_url?: string;
+
+    @ApiProperty({
+        example: 100,
+        description: 'Максимальное количество студентов (0 = без ограничений)',
+        required: false
+    })
+    @IsNumber()
+    @Min(0)
+    @IsOptional()
+    max_students?: number;
 }
 
 /**

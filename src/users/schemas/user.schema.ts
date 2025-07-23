@@ -75,6 +75,9 @@ export class User {
     @Prop({ type: [{ type: MongooseSchema.Types.ObjectId, ref: 'Role' }] })
     roles: Role[]; // Массив ролей пользователя (ссылки на документы Role)
 
+    @Prop([{ type: MongooseSchema.Types.ObjectId, ref: 'Course' }])
+    courses: MongooseSchema.Types.ObjectId[]; //список курсов
+
     // Системные поля (автоматически управляются Mongoose при timestamps: true)
     createdAt?: Date; // Дата и время создания записи
     updatedAt?: Date; // Дата и время последнего обновления записи

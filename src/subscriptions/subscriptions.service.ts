@@ -44,7 +44,7 @@ export class SubscriptionsService {
                 throw new NotFoundException(`Курс с ID ${courseId} не найден`);
             }
 
-            if (!course.isPublished || !course.isActive) {
+            if (!course.isPublished || !course.is_active) {
                 throw new BadRequestException('Курс недоступен для подписки');
             }
 
@@ -60,7 +60,7 @@ export class SubscriptionsService {
             }
 
             // Проверяем лимит студентов
-            if (course.max_students > 0 && course.current_students_count >= course.max_students) {
+            if (course.max_students && course.max_students > 0 && course.current_students_count >= course.max_students) {
                 throw new BadRequestException('Превышен лимит студентов для этого курса');
             }
         }

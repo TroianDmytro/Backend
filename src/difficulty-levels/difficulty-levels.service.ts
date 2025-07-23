@@ -283,14 +283,14 @@ export class DifficultyLevelsService {
         const courseCards = courses.map(course => ({
             id: course.id,
             title: course.title,
-            description: course.description, // Вместо short_description
-            image_url: course.image_url, // Вместо logo_url
+            short_description: course.short_description || course.description?.substring(0, 100) + '...', // fallback
+            logo_url: course.logo_url || course.image_url, // fallback на image_url
             price: course.price,
-            discount_percent: course.discount_percent, // Вместо discount_price
+            discount_price: course.price * (1 - course.discount_percent / 100), // вычисляем цену со скидкой
             currency: course.currency,
-            average_rating: course.average_rating, // Вместо rating
+            rating: course.rating || course.average_rating || 0, // используем оба поля
             reviews_count: course.reviews_count,
-            students_count: course.students_count, // Вместо current_students_count
+            current_students_count: course.current_students_count || course.students_count || 0, // fallback
             duration_hours: course.duration_hours,
             lessons_count: course.lessons_count,
             category: course.categoryId ? {

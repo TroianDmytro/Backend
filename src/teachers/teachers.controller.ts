@@ -447,7 +447,7 @@ export class TeachersController {
             courses: courses,
             totalCourses: courses.length,
             publishedCourses: courses.filter(c => c.isPublished).length,
-            activeCourses: courses.filter(c => c.isActive).length
+            activeCourses: courses.filter(c => c.is_active).length
         };
     }
 }

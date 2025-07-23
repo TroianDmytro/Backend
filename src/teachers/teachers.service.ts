@@ -267,13 +267,10 @@ export class TeachersService {
         }
         return result;
     }
-
-    /**
+    
+    /*
      * Удаление курса у преподавателя
      */
-    /**
- * Удаление курса у преподавателя
- */
     async removeCourse(teacherId: string, courseId: string): Promise<TeacherDocument> {
         const teacher = await this.teacherModel.findById(teacherId).exec();
         if (!teacher) {
@@ -326,7 +323,7 @@ export class TeachersService {
 
         // Фильтруем и обрабатываем курсы
         const activeCourses = (teacher.assignedCourses as CourseDocument[]).filter(
-            course => course.isActive && course.isPublished
+            course => course.is_active && course.isPublished
         );
 
         return activeCourses;
@@ -347,10 +344,10 @@ export class TeachersService {
         const statistics = {
             totalCourses: courses.length,
             publishedCourses: courses.filter(course => course.isPublished).length,
-            totalStudents: courses.reduce((sum, course) => sum + course.current_students_count, 0),
+            totalStudents: courses.reduce((sum, course) => sum + (course.current_students_count || 0), 0),
             averageRating: teacher.rating,
             totalReviews: teacher.reviewsCount,
-            totalRevenue: courses.reduce((sum, course) => sum + (course.price * course.current_students_count), 0)
+            totalRevenue: courses.reduce((sum, course) => sum + (course.price * (course.current_students_count || 0)), 0)
         };
 
         return statistics;
@@ -402,7 +399,7 @@ export class TeachersService {
         // Проверяем, есть ли активные курсы
         const activeCourses = await this.courseModel.find({
             teacherId: teacherId,
-            isActive: true,
+            is_active: true,
             current_students_count: { $gt: 0 }
         }).exec();
 
@@ -433,6 +430,7 @@ export class TeachersService {
         this.logger.log(`Новая заявка от преподавателя: ${teacher.email}`);
 
         // Можно отправить email администраторам
-        // await this.emailService.sendNewTeacherApplicationNotification(adminEmails, teacher);
+        //TODO
+        //await this.emailService.sendNewTeacherApplicationNotification(adminEmails, teacher);
     }
 }

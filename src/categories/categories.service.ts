@@ -203,7 +203,7 @@ export class CategoriesService {
             short_description: course.short_description,
             logo_url: course.logo_url,
             price: course.price,
-            discount_price: course.discount_price,
+            discount_price: course.price * (1 - course.discount_percent / 100),
             currency: course.currency,
             rating: course.rating,
             reviews_count: course.reviews_count,
@@ -317,9 +317,9 @@ export class CategoriesService {
             statistics: {
                 totalCourses: totalItems,
                 publishedCourses: courses.filter(c => c.isPublished).length,
-                activeCourses: courses.filter(c => c.isActive).length,
-                totalStudents: courses.reduce((sum, c) => sum + c.current_students_count, 0),
-                averageRating: courses.reduce((sum, c) => sum + c.rating, 0) / courses.length || 0
+                activeCourses: courses.filter(c => c.is_active).length,
+                totalStudents: courses.reduce((sum, c) => sum + (c.current_students_count || 0), 0),
+                averageRating: courses.reduce((sum, c) => sum + (c.rating || 0), 0) / courses.length || 0
             }
         };
     }
