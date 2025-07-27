@@ -1,7 +1,8 @@
-// В файле app.module.ts добавьте логирование:
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { ConfigModule } from '@nestjs/config';
+import { SecretsConfig } from './config/secrets.config';
+//----------------------------------------------------
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { EmailModule } from './email/email.module';
@@ -15,16 +16,20 @@ import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { CategoriesModule } from './categories/categories.module';
 import { DifficultyLevelsModule } from './difficulty-levels/difficulty-levels.module';
 
+
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
-    MongooseModule.forRoot(process.env.MONGODB_URI || 'mongodb://localhost:27017/auth-api', {
+    ConfigModule.forRoot({
+      isGlobal: true,
+      cache: true,
+    }),
+    MongooseModule.forRoot(SecretsConfig.getAllSecrets().mongodbUri, {
       connectionFactory: (connection) => {
         connection.on('connected', () => {
-          console.log('MongoDB успешно подключена');
+          console.log('✅ MongoDB успешно подключена');
         });
         connection.on('error', (error) => {
-          console.error('Ошибка подключения к MongoDB:', error);
+          console.error('❌ Ошибка подключения к MongoDB:', error);
         });
         return connection;
       },
@@ -47,9 +52,9 @@ export class AppModule { }
 
 
 /**
- * Объяснение структуры модулей:
- * 
- * 1. **Базовые модули (в начале):**
+ * Cтруктуры модулей:
+ *
+ * 1. Базовые модули (в начале):
  *    - ConfigModule - глобальная конфигурация
  *    - MongooseModule - подключение к MongoDB
  *    - RolesModule - система ролей (базовая функциональность)
@@ -58,7 +63,7 @@ export class AppModule { }
  *    - AuthModule - аутентификация и авторизация
  *    - AvatarsModule - аватары пользователей
  * 
- * 2. **Образовательные модули:**
+ * 2. Образовательные модули:
  *    - TeachersModule - управление преподавателями
  *    - CoursesModule - управление курсами
  *    - LessonsModule - управление уроками

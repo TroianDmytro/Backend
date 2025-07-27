@@ -38,8 +38,11 @@ export class TeacherResponseDto {
     @ApiProperty({ example: 'https://drive.google.com/file/d/abc123/view', description: 'CV файл' })
     cv_file_url?: string;
 
-    @ApiProperty({ example: ['507f1f77bcf86cd799439012'], description: 'Список ID курсов' })
-    courses: string[];
+    @ApiProperty({
+        example: ['507f1f77bcf86cd799439012'],
+        description: 'Список ID назначенных курсов'
+    })
+    assignedCourses: string[];
 
     @ApiProperty({ example: true, description: 'Подтвержден ли email' })
     isEmailVerified: boolean;

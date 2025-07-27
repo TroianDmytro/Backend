@@ -34,7 +34,6 @@ export class UsersService {
         return this.userModel
             .find()
             .populate('roles')
-            .populate('courses')
             .select('-password -verificationToken -resetPasswordToken -verificationTokenExpires -resetPasswordExpires')
             .exec();
     }

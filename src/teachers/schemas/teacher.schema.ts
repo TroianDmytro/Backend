@@ -153,6 +153,10 @@ TeacherSchema.virtual('id').get(function () {
     return this._id.toString();
 });
 
+TeacherSchema.virtual('courses').get(function() {
+    return this.assignedCourses;
+});
+
 // Создаем индексы для оптимизации поиска
 TeacherSchema.index({ avatarId: 1 });
 TeacherSchema.index({ isBlocked: 1 });

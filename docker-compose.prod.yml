@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  nestjs-backend:
+    image: nestjs-backend:latest
+    ports:
+      - "8001:8001"
+    environment:
+      - NODE_ENV=production
+      - PORT=8001
+      - MONGODB_HOST=your-mongo-server.com
+      - MONGODB_PORT=27017
+      - MONGODB_USER=nestjs_user
+      - MONGODB_DATABASE=nestjs_production
+      - EMAIL_HOST=smtp.gmail.com
+      - EMAIL_PORT=587
+      - EMAIL_USER=your-app@gmail.com
+      - APP_URL=https://your-domain.com
+      - CORS_ORIGINS=https://your-frontend.com,https://admin.your-domain.com
+    secrets:
+      - mongodb_password
+      - jwt_secret
+      - email_password
+    networks:
+      - nestjs-network
+    restart: unless-stopped
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        delay: 10s
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+
+networks:
+  nestjs-network:
+    driver: overlay
+
+secrets:
+  mongodb_password:
+    external: true
+    name: nestjs_mongodb_password
+  jwt_secret:
+    external: true
+    name: nestjs_jwt_secret
+  email_password:
+    external: true
+    name: nestjs_email_password

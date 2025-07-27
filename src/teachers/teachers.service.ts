@@ -90,7 +90,7 @@ export class TeachersService {
     ): Promise<{ teachers: TeacherDocument[]; totalItems: number; totalPages: number }> {
         const skip = (page - 1) * limit;
 
-        // Строим фильтр
+        // фильтр
         let filter: any = {};
         if (status !== 'all') {
             filter.approvalStatus = status;
@@ -104,7 +104,7 @@ export class TeachersService {
         const [teachers, totalItems] = await Promise.all([
             this.teacherModel
                 .find(filter)
-                .populate('courses')
+                .populate('assignedCourses') //используем assignedCourses вместо courses
                 .select('-password -verificationToken -resetPasswordToken')
                 .skip(skip)
                 .limit(limit)
@@ -124,7 +124,7 @@ export class TeachersService {
     async findById(id: string): Promise<TeacherDocument | null> {
         return this.teacherModel
             .findById(id)
-            .populate('courses')
+            .populate('assignedCourses') // используем assignedCourses
             .select('-password -verificationToken -resetPasswordToken')
             .exec();
     }
@@ -133,7 +133,10 @@ export class TeachersService {
      * Получение преподавателя по email
      */
     async findByEmail(email: string): Promise<TeacherDocument | null> {
-        return this.teacherModel.findOne({ email }).populate('courses').exec();
+        return this.teacherModel
+            .findOne({ email })
+            .populate('assignedCourses') // используем assignedCourses
+            .exec();
     }
 
     /**
@@ -267,7 +270,7 @@ export class TeachersService {
         }
         return result;
     }
-    
+
     /*
      * Удаление курса у преподавателя
      */

@@ -32,6 +32,7 @@ import { TeacherResponseDto } from './dto/teacher-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CourseDocument } from 'src/courses/schemas/course.schema';
 
 @ApiTags('teachers')
 @Controller('teachers')
@@ -213,8 +214,8 @@ export class TeachersController {
         @Body() approvalDto: TeacherApprovalDto,
         @Request() req?
     ) {
-        // const adminId = req?.user?.userId;
-        const adminId = 'temp-admin-id'; // Временно для работы без JWT
+        const adminId = req?.user?.userId;
+        // const adminId = 'temp-admin-id'; // Временно для работы без JWT
 
         this.logger.log(`Администратор изменяет статус заявки преподавателя ${id} на ${approvalDto.approvalStatus}`);
 
@@ -440,7 +441,13 @@ export class TeachersController {
     async getTeacherCourses(@Param('id') id: string) {
         this.logger.log(`Получение курсов преподавателя с ID: ${id}`);
 
-        const courses = await this.teachersService.getTeacherCourses(id);
+        const teacher = await this.teachersService.findById(id);
+        if (!teacher) {
+            throw new NotFoundException('Преподаватель не найден');
+        }
+
+        // Получаем назначенные курсы
+        const courses = teacher.assignedCourses as CourseDocument[] || [];
 
         return {
             teacherId: id,

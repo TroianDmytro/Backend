@@ -1,7 +1,8 @@
 // src/users/schemas/user.schema.ts (добавить поле isBlocked)
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Schema as MongooseSchema } from 'mongoose';
+import { Document, Schema as MongooseSchema, Types } from 'mongoose';
 import { Role } from '../../roles/schemas/role.schema';
+import { Course } from 'src/courses/schemas/course.schema';
 
 
 export type UserDocument = User & Document;
@@ -75,8 +76,11 @@ export class User {
     @Prop({ type: [{ type: MongooseSchema.Types.ObjectId, ref: 'Role' }] })
     roles: Role[]; // Массив ролей пользователя (ссылки на документы Role)
 
-    @Prop([{ type: MongooseSchema.Types.ObjectId, ref: 'Course' }])
-    courses: MongooseSchema.Types.ObjectId[]; //список курсов
+    @Prop({
+        type: [{ type: Types.ObjectId, ref: 'Course' }],
+        default: []
+    })
+    assignedCourses: Types.ObjectId[] | Course[]; //список курсов
 
     // Системные поля (автоматически управляются Mongoose при timestamps: true)
     createdAt?: Date; // Дата и время создания записи
