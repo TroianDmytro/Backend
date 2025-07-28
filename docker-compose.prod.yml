@@ -1,50 +1,70 @@
+# docker-compose.prod.yml
 version: '3.8'
 
 services:
   nestjs-backend:
-    image: nestjs-backend:latest
+    image: nestjs-backend:production
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
     ports:
-      - "8001:8001"
+      - "8000:8000"
     environment:
+      # Основные настройки
       - NODE_ENV=production
-      - PORT=8001
-      - MONGODB_HOST=your-mongo-server.com
-      - MONGODB_PORT=27017
-      - MONGODB_USER=nestjs_user
-      - MONGODB_DATABASE=nestjs_production
+      - PORT=8000
+      - APP_URL=https://nestneroyln.pp.ua #TODO
+      
+      # MongoDB (внешняя база данных)
+      - MONGODB_URI=mongodb+srv://troyant64:msfA0CqyZhkdF5NH@cluster0.icbj0hf.mongodb.net/
+      
+      # Email настройки
       - EMAIL_HOST=smtp.gmail.com
       - EMAIL_PORT=587
-      - EMAIL_USER=your-app@gmail.com
-      - APP_URL=https://your-domain.com
-      - CORS_ORIGINS=https://your-frontend.com,https://admin.your-domain.com
+      - EMAIL_USER=test.dpoff@gmail.com
+      - EMAIL_FROM=test.dpoff@gmail.com
+      
+      # CORS
+      - CORS_ORIGINS=https://nestneroyln.pp.ua #TODO
+    
+    # Docker Secrets
     secrets:
-      - mongodb_password
       - jwt_secret
       - email_password
+    
+    # Сеть
     networks:
       - nestjs-network
+    
+    # Перезапуск
     restart: unless-stopped
+    
+    # Логирование
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Ресурсы
     deploy:
-      replicas: 2
-      update_config:
-        parallelism: 1
-        delay: 10s
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-        max_attempts: 3
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
 
+# Сети
 networks:
   nestjs-network:
-    driver: overlay
+    driver: bridge
 
+# Секреты (для локального тестирования)
 secrets:
-  mongodb_password:
-    external: true
-    name: nestjs_mongodb_password
   jwt_secret:
-    external: true
-    name: nestjs_jwt_secret
+    file: ./secrets/jwt-secret.txt
   email_password:
-    external: true
-    name: nestjs_email_password
+    file: ./secrets/email-password.txt

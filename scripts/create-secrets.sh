@@ -1,75 +1,34 @@
 #!/bin/bash
-
-# Скрипт создания Docker секретов
-set -e
+# scripts/create-secrets.sh
 
 echo "🔐 Создание Docker секретов для NestJS Backend"
 
-# Проверяем, что мы в Docker Swarm режиме
+# Проверяем Docker Swarm
 if ! docker info | grep -q "Swarm: active"; then
-    echo "❌ Docker Swarm не активен. Инициализируйте Swarm с помощью: docker swarm init"
+    echo "❌ Docker Swarm не активен. Инициализируйте: docker swarm init"
     exit 1
 fi
 
-# Функция для создания секрета
+# Функция создания секрета
 create_secret() {
     local secret_name=$1
-    local secret_file=$2
+    local secret_value=$2
     
-    if [ ! -f "$secret_file" ]; then
-        echo "❌ Файл секрета $secret_file не найден"
-        return 1
-    fi
-    
-    # Удаляем секрет если он уже существует
-    if docker secret ls --format "{{.Name}}" | grep -q "^${secret_name}$"; then
-        echo "🗑️  Удаляем существующий секрет: $secret_name"
-        docker secret rm "$secret_name"
-    fi
+    # Удаляем если существует
+    docker secret rm "$secret_name" 2>/dev/null || true
     
     # Создаем новый секрет
-    echo "✅ Создаем секрет: $secret_name"
-    docker secret create "$secret_name" "$secret_file"
+    echo "$secret_value" | docker secret create "$secret_name" -
+    echo "✅ Секрет '$secret_name' создан"
 }
 
-# Создаем директорию для секретов если её нет
-mkdir -p secrets
-
-# Проверяем наличие файлов секретов
-echo "📁 Проверка файлов секретов..."
-
-# MongoDB пароль
-if [ ! -f "secrets/mongodb-password.txt" ]; then
-    echo "🔑 Введите пароль для MongoDB:"
-    read -s mongodb_password
-    echo "$mongodb_password" > secrets/mongodb-password.txt
-    echo "✅ Пароль MongoDB сохранен"
-fi
-
 # JWT секрет
-if [ ! -f "secrets/jwt-secret.txt" ]; then
-    echo "🔑 Генерируем JWT секрет..."
-    openssl rand -base64 64 > secrets/jwt-secret.txt
-    echo "✅ JWT секрет сгенерирован"
-fi
+JWT_SECRET="cd2c18d6c7f64a37a1a404c4d4c5a75ee76ec2b13949e3a67e1e0e1a3cf6a8db"
+create_secret "nestjs_jwt_secret" "$JWT_SECRET"
 
 # Email пароль
-if [ ! -f "secrets/email-password.txt" ]; then
-    echo "🔑 Введите пароль для email:"
-    read -s email_password
-    echo "$email_password" > secrets/email-password.txt
-    echo "✅ Пароль email сохранен"
-fi
+EMAIL_PASSWORD="lplj ubop uudh fpjg"
+create_secret "nestjs_email_password" "$EMAIL_PASSWORD"
 
-# Создаем секреты в Docker
-echo "🔐 Создание Docker секретов..."
-create_secret "nestjs_mongodb_password" "secrets/mongodb-password.txt"
-create_secret "nestjs_jwt_secret" "secrets/jwt-secret.txt"
-create_secret "nestjs_email_password" "secrets/email-password.txt"
-
-# Список созданных секретов
 echo "📋 Созданные секреты:"
-docker secret ls
-
-echo "✅ Все секреты успешно созданы!"
-echo "⚠️  Не забудьте удалить файлы секретов после создания или добавить их в .gitignore"
+docker secret ls | grep nestjs_

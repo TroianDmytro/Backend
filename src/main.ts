@@ -1,3 +1,4 @@
+// src/main.ts
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -8,18 +9,11 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
 
   try {
-    // Загружаем секреты перед созданием приложения
-    logger.log('🔐 Загрузка секретов...');
+    // Загружаем секреты
+    logger.log('🔐 Загрузка конфигурации...');
     const secrets = SecretsConfig.getAllSecrets();
 
-    // Логируем замаскированную информацию
-    logger.log('🏁 Конфигурация приложения:');
-    logger.log(`📊 NODE_ENV: ${secrets.nodeEnv}`);
-    logger.log(`🌐 PORT: ${secrets.port}`);
-    logger.log(`🗄️  MongoDB URI: ${secrets.mongodbUri.replace(/:([^:@]+)@/, ':***@')}`);
-    logger.log(`🔑 JWT Secret: ${SecretsConfig.maskSensitiveData(secrets.jwtSecret)}`);
-    logger.log(`📧 Email Host: ${secrets.emailHost}:${secrets.emailPort}`);
-
+    // Создаем приложение
     const app = await NestFactory.create(AppModule);
 
     // Настройка валидации
@@ -33,14 +27,13 @@ async function bootstrap() {
       }),
     );
 
-    // Настройка Swagger только для development
+    // Swagger только для development
     if (secrets.nodeEnv !== 'production') {
       const config = new DocumentBuilder()
         .setTitle('NestJS Backend API')
-        .setDescription('API документация для NestJS приложения')
+        .setDescription('API документация')
         .setVersion('1.0')
-        .addTag('auth')
-        .addBearerAuth()// Добавляем поддержку Bearer токена для Swagger
+        .addBearerAuth()
         .build();
 
       const document = SwaggerModule.createDocument(app, config);
@@ -50,35 +43,30 @@ async function bootstrap() {
         },
       });
 
-      logger.log(`📚 Swagger доступен по адресу: http://localhost:${secrets.port}/api`);
+      logger.log(`📚 Swagger доступен по адресу: http://localhost:${secrets.port}/api#`);
     }
 
-    // Включение CORS
+    // CORS
     app.enableCors({
-      origin: process.env.CORS_ORIGINS?.split(',') || '*',
+      origin: secrets.corsOrigins.split(','),
       methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
       credentials: true,
     });
 
     // Graceful shutdown
     process.on('SIGTERM', async () => {
-      logger.log('🛑 SIGTERM получен, завершаем приложение...');
+      logger.log('🛑 SIGTERM получен, завершаем работу...');
       await app.close();
       process.exit(0);
     });
 
-    process.on('SIGINT', async () => {
-      logger.log('🛑 SIGINT получен, завершаем приложение...');
-      await app.close();
-      process.exit(0);
-    });
-    // Запуск сервера
+    // Запуск
     await app.listen(secrets.port);
     logger.log(`🚀 Приложение запущено на порту ${secrets.port}`);
-    logger.log(`🌍 Приложение доступно по адресу: ${secrets.appUrl}`);
+    logger.log(`🌍 URL: ${secrets.appUrl}`);
 
   } catch (error) {
-    logger.error('❌ Ошибка запуска приложения:', error);
+    logger.error('❌ Ошибка запуска:', error);
     process.exit(1);
   }
 }

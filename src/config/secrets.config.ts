@@ -1,4 +1,4 @@
-//secrets.config.ts
+// src/config/secrets.config.ts
 import { readFileSync } from 'fs';
 import { Logger } from '@nestjs/common';
 
@@ -6,24 +6,21 @@ export class SecretsConfig {
     private static readonly logger = new Logger(SecretsConfig.name);
 
     /**
-     * Читает секрет из файла или переменной окружения
-     * @param secretName - Имя секрета
-     * @param envVarName - Имя переменной окружения (fallback)
-     * @param defaultValue - Значение по умолчанию
+     * Читает секрет из файла Docker Secrets или переменной окружения
      */
     static getSecret(
         secretName: string,
         envVarName?: string,
         defaultValue?: string
     ): string {
-        // 1. Пытаемся прочитать из Docker Secret файла
+        // 1. Пытаемся прочитать из Docker Secret
         const secretFilePath = `/run/secrets/${secretName}`;
         try {
             const secretValue = readFileSync(secretFilePath, 'utf8').trim();
-            this.logger.log(`✅ Секрет '${secretName}' загружен из файла`);
+            this.logger.log(`✅ Секрет '${secretName}' загружен из Docker Secret`);
             return secretValue;
         } catch (error) {
-            this.logger.warn(`⚠️  Секрет файл '${secretFilePath}' не найден`);
+            // Игнорируем ошибку чтения файла
         }
 
         // 2. Пытаемся прочитать из переменной окружения
@@ -38,7 +35,7 @@ export class SecretsConfig {
             return defaultValue;
         }
 
-        throw new Error(`❌ Секрет '${secretName}' не найден ни в файлах, ни в переменных окружения`);
+        throw new Error(`❌ Секрет '${secretName}' не найден`);
     }
 
     /**
@@ -46,32 +43,26 @@ export class SecretsConfig {
      */
     static getAllSecrets() {
         return {
-            mongodbPassword: this.getSecret('mongodb_password', 'MONGODB_PASSWORD'),
+            // MongoDB URI берем из переменной окружения (внешняя БД)
+            mongodbUri: process.env.MONGODB_URI ||
+                'mongodb+srv://troyant64:msfA0CqyZhkdF5NH@cluster0.icbj0hf.mongodb.net/',
+
+            // JWT секрет из Docker Secret
             jwtSecret: this.getSecret('jwt_secret', 'JWT_SECRET'),
+
+            // Email пароль из Docker Secret
             emailPassword: this.getSecret('email_password', 'EMAIL_PASSWORD'),
 
-            // Не секретные переменные окружения
-            mongodbUri: this.buildMongoUri(),
-            port: parseInt(process.env.PORT || '8001'),
+            // Остальные настройки из переменных окружения
+            port: parseInt(process.env.PORT || '8000'),
             nodeEnv: process.env.NODE_ENV || 'development',
-            emailHost: process.env.EMAIL_HOST || 'localhost',
+            emailHost: process.env.EMAIL_HOST || 'smtp.gmail.com',
             emailPort: parseInt(process.env.EMAIL_PORT || '587'),
             emailUser: process.env.EMAIL_USER || '',
-            appUrl: process.env.APP_URL || 'http://localhost:8001',
+            emailFrom: process.env.EMAIL_FROM || '',
+            appUrl: process.env.APP_URL || 'http://localhost:8000',
+            corsOrigins: process.env.CORS_ORIGINS || '*',
         };
-    }
-
-    /**
-     * Строит URI для MongoDB с паролем из секрета
-     */
-    private static buildMongoUri(): string {
-        const mongoPassword = this.getSecret('mongodb_password', 'MONGODB_PASSWORD');
-        const mongoHost = process.env.MONGODB_HOST || 'localhost';
-        const mongoPort = process.env.MONGODB_PORT || '27017';
-        const mongoUser = process.env.MONGODB_USER || 'admin';
-        const mongoDatabase = process.env.MONGODB_DATABASE || 'nestjs-app';
-
-        return `mongodb://${mongoUser}:${mongoPassword}@${mongoHost}:${mongoPort}/${mongoDatabase}?authSource=admin`;
     }
 
     /**
