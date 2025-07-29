@@ -11,13 +11,13 @@ VERSION=${1:-latest}
 
 # Экспорт переменных окружения
 export VERSION=$VERSION
-export APP_URL="https://api.your-domain.com"
+export APP_URL="https://nestneroyln.pp.ua" #TODO
 export MONGODB_URI="mongodb+srv://troyant64:msfA0CqyZhkdF5NH@cluster0.icbj0hf.mongodb.net/"
 export EMAIL_HOST="smtp.gmail.com"
 export EMAIL_PORT="587"
 export EMAIL_USER="test.dpoff@gmail.com"
 export EMAIL_FROM="test.dpoff@gmail.com"
-export CORS_ORIGINS="https://your-frontend.com,https://admin.your-domain.com"
+export CORS_ORIGINS="https://nestneroyln.pp.ua"
 
 echo "📦 Версия: $VERSION"
 echo "🏷️  Стек: $STACK_NAME"

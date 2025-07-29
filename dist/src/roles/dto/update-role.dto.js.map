@@ -1,0 +1,1 @@
+{"version":3,"file":"update-role.dto.js","sourceRoot":"","sources":["../../../../src/roles/dto/update-role.dto.ts"],"names":[],"mappings":";;;;;;;;;;;;AACA,qDAAuD;AACvD,6CAA8C;AAE9C,MAAa,aAAa;IAItB,IAAI,CAAU;CACjB;AALD,sCAKC;AADG;IAHC,IAAA,qBAAW,EAAC,EAAE,OAAO,EAAE,QAAQ,EAAE,WAAW,EAAE,eAAe,EAAE,QAAQ,EAAE,KAAK,EAAE,CAAC;IACjF,IAAA,0BAAQ,GAAE;IACV,IAAA,4BAAU,GAAE;;2CACC"}

@@ -1,0 +1,33 @@
+import { Model } from 'mongoose';
+import { User, UserDocument } from './schemas/user.schema';
+import { CreateUserDto } from './dto/create-user.dto';
+import { RolesService } from '../roles/roles.service';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { EmailService } from 'src/email/email.service';
+export declare class UsersService {
+    private userModel;
+    private rolesService;
+    private readonly emailService;
+    private readonly logger;
+    constructor(userModel: Model<UserDocument>, rolesService: RolesService, emailService: EmailService);
+    findOne(email: string): Promise<User | null>;
+    findByVerificationToken(token: string): Promise<User | null>;
+    findAll(): Promise<UserDocument[]>;
+    create(createUserDto: CreateUserDto): Promise<User | null>;
+    verifyEmail(token: string): Promise<User>;
+    generateNewVerificationToken(email: string): Promise<string>;
+    generateResetPasswordToken(email: string): Promise<string>;
+    resetPassword(token: string, newPassword: string): Promise<User>;
+    addRoleToUser(userId: string, roleId: string): Promise<User | null>;
+    removeRoleFromUser(userId: string, roleId: string): Promise<User | null>;
+    verifyEmailWithoutToken(email: string): Promise<User>;
+    findById(id: string): Promise<UserDocument | null>;
+    updateUser(id: string, updateUserDto: UpdateUserDto, isAdmin?: boolean): Promise<UserDocument>;
+    blockUser(id: string, isBlocked: boolean): Promise<UserDocument>;
+    deleteUser(id: string): Promise<void>;
+    findUsersWithAvatars(): Promise<UserDocument[]>;
+    findUsersWithoutAvatars(): Promise<UserDocument[]>;
+    saveResetCode(email: string, code: string): Promise<void>;
+    findByResetCode(code: string): Promise<UserDocument | null>;
+    updatePassword(userId: string, newPassword: string): Promise<void>;
+}

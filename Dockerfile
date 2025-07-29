@@ -1,6 +1,6 @@
 # Dockerfile
 # Этап 1: Базовый образ
-FROM node:18-alpine AS base
+FROM node:23.10.0-alpine AS base
 
 # Устанавливаем необходимые системные пакеты
 RUN apk add --no-cache dumb-init curl
@@ -30,7 +30,7 @@ RUN npm ci
 # Копируем исходный код
 COPY . .
 
-# Собираем приложение
+# ВАЖНО: Компилируем TypeScript в JavaScript
 RUN npm run build
 
 # Этап 4: Production образ
@@ -47,7 +47,7 @@ COPY --from=builder /app/package*.json ./
 # Копируем вспомогательные скрипты
 COPY healthcheck.js ./
 COPY scripts/wait-for-mongo.js ./scripts/
-COPY scripts/read-secrets.js ./scripts/
+# COPY scripts/read-secrets.js ./scripts/
 
 # Создаем директорию для загрузок
 RUN mkdir -p uploads && chown -R nestjs:nodejs /app
@@ -64,4 +64,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 
 # Запуск приложения с обработкой сигналов
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["sh", "-c", "node scripts/wait-for-mongo.js && node dist/main.js"]
+CMD ["sh", "-c", "node scripts/wait-for-mongo.js && node dist/src/main.js"]

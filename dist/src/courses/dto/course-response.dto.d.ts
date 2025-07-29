@@ -1,0 +1,41 @@
+export declare class CourseResponseDto {
+    id: string;
+    title: string;
+    description: string;
+    short_description?: string;
+    logo_url?: string;
+    cover_image_url?: string;
+    price: number;
+    discount_price?: number;
+    currency: string;
+    teacherId: string;
+    teacher?: {
+        id: string;
+        name: string;
+        second_name: string;
+        rating: number;
+        experience_years: number;
+    };
+    category?: string;
+    tags: string[];
+    difficulty_level: string;
+    isPublished: boolean;
+    isActive: boolean;
+    isFeatured: boolean;
+    duration_hours: number;
+    lessons_count: number;
+    max_students: number;
+    current_students_count: number;
+    prerequisites: string[];
+    learning_outcomes: string[];
+    rating: number;
+    reviews_count: number;
+    language?: string;
+    has_certificate: boolean;
+    promo_video_url?: string;
+    target_audience: string[];
+    start_date?: Date;
+    end_date?: Date;
+    createdAt: Date;
+    updatedAt: Date;
+}
