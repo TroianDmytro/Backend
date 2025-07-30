@@ -129,6 +129,7 @@ export class Course {
 export const CourseSchema = SchemaFactory.createForClass(Course);
 
 // Создаем индексы для оптимизации запросов
+CourseSchema.index({ slug: 1 }, { unique: true });
 CourseSchema.index({ categoryId: 1 }); // Индекс для поиска по категориям
 CourseSchema.index({ difficultyLevelId: 1 }); // Индекс для поиска по уровням сложности
 CourseSchema.index({ teacherId: 1 }); // Индекс для поиска по преподавателям

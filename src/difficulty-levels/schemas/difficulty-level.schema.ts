@@ -100,5 +100,8 @@ DifficultyLevelSchema.virtual('courses', {
 });
 
 // Индексы для оптимизации
+DifficultyLevelSchema.index({ slug: 1 });
+DifficultyLevelSchema.index({ code: 1 });
+DifficultyLevelSchema.index({ level: 1 });
 DifficultyLevelSchema.index({ isActive: 1 });
 DifficultyLevelSchema.index({ order: 1 });

@@ -103,6 +103,7 @@ CategorySchema.virtual('subcategories', {
 });
 
 // Индексы для оптимизации
+CategorySchema.index({ slug: 1 });
 CategorySchema.index({ parent_id: 1 });
 CategorySchema.index({ isActive: 1 });
 CategorySchema.index({ order: 1 });
