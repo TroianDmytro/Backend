@@ -7,8 +7,8 @@ WORKDIR /app
 # Устанавливаем системные зависимости для компиляции
 RUN apk add --no-cache python3 make g++ vips-dev libc6-compat
 
-# Копируем файлы зависимостей
-COPY package*.json ./
+# Копируем файлы зависимостей И TypeScript конфигурацию
+COPY package*.json tsconfig*.json ./
 
 # Устанавливаем все зависимости (включая dev)
 RUN npm ci
@@ -64,7 +64,7 @@ LABEL description="NestJS Education Platform API"
 
 # Healthcheck
 #HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
- # CMD node healthcheck.js
+# CMD node healthcheck.js
 
 # Используем dumb-init для правильного управления процессами
 ENTRYPOINT ["dumb-init", "--"]

@@ -51,8 +51,8 @@ test-results
 .prettierrc
 .eslintrc.js
 jest.config.js
-tsconfig.json
-tsconfig.build.json
+#tsconfig.json
+#tsconfig.build.json
 
 # Файлы uploads (если не нужны в образе)
 uploads/*
