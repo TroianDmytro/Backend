@@ -1,0 +1,59 @@
+# Зависимости
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Собранные файлы
+dist
+build
+
+# Временные файлы
+*.tmp
+*.temp
+.cache
+
+# Логи
+logs
+*.log
+
+# Файлы среды разработки
+.env.local
+.env.development
+.env.test
+
+# IDE файлы
+.vscode
+.idea
+*.swp
+*.swo
+
+# Операционная система
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+README.md
+
+# Docker файлы
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Тестовые файлы
+coverage
+.nyc_output
+test-results
+
+# Прочие файлы разработки
+.prettierrc
+.eslintrc.js
+jest.config.js
+tsconfig.json
+tsconfig.build.json
+
+# Файлы uploads (если не нужны в образе)
+uploads/*
+temp/*

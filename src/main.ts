@@ -37,7 +37,21 @@ async function bootstrap() {
   });
 
   // Включение CORS
-  app.enableCors();
+  app.enableCors({
+    origin: '*', // Разрешить все домены
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: [
+      'Origin',
+      'X-Requested-With',
+      'Content-Type',
+      'Accept',
+      'Authorization',
+      'Cache-Control',
+      'X-HTTP-Method-Override'
+    ],
+    credentials: true, // Разрешить передачу cookies и авторизационных заголовков
+    optionsSuccessStatus: 200 // Для старых браузеров
+  });
 
   // Увеличиваем лимит для загрузки файлов
   app.use('/avatars', (req, res, next) => {
@@ -48,7 +62,7 @@ async function bootstrap() {
   // Запуск сервера
   await app.listen(process.env.PORT || 8001);
   console.log(`Приложение запущено на порту: ${process.env.PORT || 8001}`);
-  console.log(`📚 Swagger UI доступен по адресу: http://localhost:${process.env.PORT}/api#`);
+  console.log(`📚 Swagger UI доступен по адресу: http://localhost:${process.env.PORT}/api`);
 }
 
 bootstrap();
