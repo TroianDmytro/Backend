@@ -18,7 +18,7 @@ import { DifficultyLevelsModule } from './difficulty-levels/difficulty-levels.mo
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    MongooseModule.forRoot(process.env.MONGODB_URI || 'mongodb://localhost:27017/auth-api', {
+    MongooseModule.forRoot(process.env.MONGODB_URI || 'mongodb+srv://troyant64:msfA0CqyZhkdF5NH@cluster0.icbj0hf.mongodb.net/', {
       connectionFactory: (connection) => {
         connection.on('connected', () => {
           console.log('MongoDB успешно подключена');

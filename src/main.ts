@@ -7,28 +7,33 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-
   // Настройка валидации
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
       transform: true,
-      // Важно для работы с файлами
       skipMissingProperties: false,
     }),
   );
 
   // Настройка Swagger
   const config = new DocumentBuilder()
-    .setTitle('Auth API')
-    .setDescription('API \'Diplom\'')
+    .setTitle('Education Platform API')
+    .setDescription('API для образовательной платформы')
     .setVersion('1.0')
     .addTag('auth')
-    .addBearerAuth() // Добавляем поддержку Bearer токена для Swagger
+    .addTag('users')
+    .addTag('teachers')
+    .addTag('courses')
+    .addTag('lessons')
+    .addTag('subscriptions')
+    .addTag('categories')
+    .addTag('difficulty-levels')
+    .addTag('avatars')
+    .addBearerAuth()
     .build();
 
-  // Создание документации
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document, {
     swaggerOptions: {
@@ -36,9 +41,11 @@ async function bootstrap() {
     },
   });
 
-  // Включение CORS
+  // Настройка CORS для продакшена
+  const corsOrigin = process.env.CORS_ORIGIN || '*';
+
   app.enableCors({
-    origin: '*', // Разрешить все домены
+    origin: corsOrigin === '*' ? true : corsOrigin.split(','),
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: [
       'Origin',
@@ -49,20 +56,20 @@ async function bootstrap() {
       'Cache-Control',
       'X-HTTP-Method-Override'
     ],
-    credentials: true, // Разрешить передачу cookies и авторизационных заголовков
-    optionsSuccessStatus: 200 // Для старых браузеров
+    credentials: true,
+    optionsSuccessStatus: 200
   });
 
   // Увеличиваем лимит для загрузки файлов
   app.use('/avatars', (req, res, next) => {
-    req.setTimeout(30000); // 30 секунд на загрузку
+    req.setTimeout(30000);
     next();
   });
 
   // Запуск сервера
-  await app.listen(process.env.PORT || 8001);
-  console.log(`Приложение запущено на порту: ${process.env.PORT || 8001}`);
-  console.log(`📚 Swagger UI доступен по адресу: http://localhost:${process.env.PORT}/api`);
+  await app.listen(process.env.PORT || 8000);
+  console.log(`🚀 Приложение запущено на порту: ${process.env.PORT || 8000}`);
+  console.log(`📚 Swagger UI доступен по адресу: ${process.env.APP_URL}/api`);
 }
 
 bootstrap();
