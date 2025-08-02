@@ -14,11 +14,12 @@ import { LessonsModule } from './lessons/lessons.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { CategoriesModule } from './categories/categories.module';
 import { DifficultyLevelsModule } from './difficulty-levels/difficulty-levels.module';
+import { HomeworkModule } from './homework/homework.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    MongooseModule.forRoot(process.env.MONGODB_URI || 'mongodb+srv://troyant64:msfA0CqyZhkdF5NH@cluster0.icbj0hf.mongodb.net/', {
+    MongooseModule.forRoot(process.env.MONGODB_URI || 'mongodb://localhost:27017/auth-api', {
       connectionFactory: (connection) => {
         connection.on('connected', () => {
           console.log('MongoDB успешно подключена');
@@ -39,6 +40,7 @@ import { DifficultyLevelsModule } from './difficulty-levels/difficulty-levels.mo
     DifficultyLevelsModule, // Модуль уровней сложности
     CoursesModule,  // Модуль курсов
     LessonsModule,  // Модуль уроков
+    HomeworkModule, // Модуль домашних заданий
     SubscriptionsModule // Модуль подписок
   ],
   controllers: [AvatarsController],
