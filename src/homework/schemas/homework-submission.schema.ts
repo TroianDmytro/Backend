@@ -26,13 +26,6 @@ export class HomeworkSubmission {
     // Связи с основными сущностями
     @Prop({
         type: MongooseSchema.Types.ObjectId,
-        ref: 'Homework',
-        required: true,
-    })
-    homeworkId: MongooseSchema.Types.ObjectId; // ID домашнего задания
-
-    @Prop({
-        type: MongooseSchema.Types.ObjectId,
         ref: 'Lesson',
         required: true,
     })
@@ -54,16 +47,16 @@ export class HomeworkSubmission {
 
     // Информация о сдаче задания
     @Prop({ type: String })
-    student_comment?: string; // Комментарий студента к работе
+    student_comment: string; // Комментарий студента к работе
 
-    // Файлы домашнего задания (ZIP архивы, хранятся как Base64)
+    // Файлы домашнего задания (zip, rar)
     @Prop({
         type: [{
             filename: { type: String, required: true },
             original_name: { type: String, required: true },
-            data: { type: String, required: true }, // Base64 данные ZIP файла
+            url: { type: String, required: true }, // Ссылка на файл в хранилище
             size_bytes: { type: Number, required: true },
-            mime_type: { type: String, default: 'application/zip' },
+            mime_type: { type: String, required: true },
             uploaded_at: { type: Date, default: Date.now }
         }],
         required: true,
@@ -77,7 +70,7 @@ export class HomeworkSubmission {
     files: Array<{
         filename: string;
         original_name: string;
-        data: string; // Base64 строка
+        url: string;
         size_bytes: number;
         mime_type: string;
         uploaded_at: Date;
@@ -91,7 +84,7 @@ export class HomeworkSubmission {
     })
     status: 'submitted' | 'in_review' | 'reviewed' | 'returned_for_revision';
 
-    @Prop({ type: Date, default: Date.now })
+    @Prop({ type: Date })
     submitted_at: Date; // Дата и время сдачи
 
     // Проверка преподавателем
@@ -129,11 +122,14 @@ export class HomeworkSubmission {
     @Prop({ type: Number, default: 1 })
     attempt_number: number; // Номер попытки сдачи
 
+    @Prop({ type: Number, default: 3 })
+    max_attempts: number; // Максимальное количество попыток
+
     @Prop({ type: Boolean, default: false })
     is_late: boolean; // Сдано ли задание с опозданием
 
     @Prop({ type: Date })
-    deadline?: Date; // Срок сдачи (копируется из задания)
+    deadline?: Date; // Срок сдачи (копируется из урока)
 
     // Системные поля
     createdAt?: Date;
@@ -148,13 +144,6 @@ HomeworkSubmissionSchema.virtual('id').get(function () {
 });
 
 // Виртуальные поля для связей
-HomeworkSubmissionSchema.virtual('homework', {
-    ref: 'Homework',
-    localField: 'homeworkId',
-    foreignField: '_id',
-    justOne: true
-});
-
 HomeworkSubmissionSchema.virtual('lesson', {
     ref: 'Lesson',
     localField: 'lessonId',
@@ -184,7 +173,6 @@ HomeworkSubmissionSchema.virtual('teacher', {
 });
 
 // Индексы для оптимизации
-HomeworkSubmissionSchema.index({ homeworkId: 1 });
 HomeworkSubmissionSchema.index({ courseId: 1 });
 HomeworkSubmissionSchema.index({ studentId: 1 });
 HomeworkSubmissionSchema.index({ status: 1 });
@@ -194,37 +182,6 @@ HomeworkSubmissionSchema.index({ reviewed_at: -1 });
 
 // Уникальный индекс для предотвращения дублирования попыток
 HomeworkSubmissionSchema.index(
-    { homeworkId: 1, studentId: 1, attempt_number: 1 },
+    { lessonId: 1, studentId: 1, attempt_number: 1 },
     { unique: true }
 );
-
-/**
- * Объяснение обновленной схемы сдачи заданий:
- * 
- * 1. **СВЯЗИ:**
- *    - homeworkId - связь с заданием
- *    - lessonId - связь с уроком
- *    - studentId - связь с студентом
- *    - courseId - связь с курсом
- * 
- * 2. **ХРАНЕНИЕ ФАЙЛОВ:**
- *    - Файлы ZIP архивов хранятся как Base64 в MongoDB
- *    - Сохраняется оригинальное имя и размер файла
- *    - Дата загрузки каждого файла
- * 
- * 3. **СТАТУСЫ:**
- *    - submitted - отправлено студентом
- *    - in_review - на проверке у преподавателя
- *    - reviewed - проверено преподавателем
- *    - returned_for_revision - возвращено на доработку
- * 
- * 4. **ОЦЕНИВАНИЕ:**
- *    - score - общая оценка (0-100)
- *    - teacher_comment - комментарий преподавателя
- *    - detailed_feedback - детальная оценка по критериям
- * 
- * 5. **КОНТРОЛЬ ПОПЫТОК:**
- *    - attempt_number - номер попытки
- *    - is_late - флаг опоздания
- *    - deadline - срок сдачи
- */

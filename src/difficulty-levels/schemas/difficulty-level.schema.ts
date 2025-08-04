@@ -4,6 +4,9 @@ import { Document } from 'mongoose';
 
 export type DifficultyLevelDocument = DifficultyLevel & Document;
 
+/**
+ * Схема уровня сложности курсов
+ */
 @Schema({
     timestamps: true,
     toJSON: {
@@ -17,41 +20,67 @@ export type DifficultyLevelDocument = DifficultyLevel & Document;
     }
 })
 export class DifficultyLevel {
+    // Виртуальное поле ID
     id?: string;
 
+    // Основная информация
     @Prop({ required: true, unique: true })
-    name: string; // Название уровня сложности
+    name: string; // Название уровня (например, "Начальный")
 
     @Prop({ required: true, unique: true })
-    slug: string; // URL-friendly название
+    slug: string; // URL-friendly название (например, "beginner")
 
     @Prop({ required: true, unique: true })
-    code: string; // Короткий код (beginner, intermediate, advanced)
-
-    @Prop({ required: true, min: 1, max: 10 })
-    level: number; // Числовой уровень сложности (1-10)
+    code: string; // Код уровня (например, "beginner", "intermediate", "advanced")
 
     @Prop({ required: true })
     description: string; // Описание уровня
 
-    @Prop({ default: '#28a745' })
-    color: string; // Цвет для UI
+    @Prop({ type: String })
+    short_description?: string; // Краткое описание
+
+    // Визуальное оформление
+    @Prop({ type: String })
+    icon?: string; // Иконка уровня
+
+    @Prop({ type: String, default: '#4caf50' })
+    color?: string; // Цвет уровня для UI
+
+    // Порядок и приоритет
+    @Prop({ type: Number, required: true, unique: true })
+    level: number; // Числовой уровень (1 - начальный, 2 - средний, 3 - продвинутый и т.д.)
+
+    @Prop({ type: Number, default: 0 })
+    order: number; // Порядок отображения
+
+    // Требования и рекомендации
+    @Prop({ type: [String], default: [] })
+    prerequisites: string[]; // Предварительные требования
 
     @Prop({ type: [String], default: [] })
-    requirements: string[]; // Требования для этого уровня
+    target_audience: string[]; // Целевая аудитория
 
+    @Prop({ type: Number, min: 0 })
+    recommended_hours?: number; // Рекомендуемое количество часов обучения
+
+    @Prop({ type: Number, min: 0 })
+    min_experience_years?: number; // Минимальный опыт в годах
+
+    // Статусы
     @Prop({ default: true })
     isActive: boolean; // Активен ли уровень
 
+    // Статистика
     @Prop({ type: Number, default: 0 })
-    courses_count: number; // Количество курсов с этим уровнем
+    courses_count: number; // Количество курсов этого уровня
 
     @Prop({ type: Number, default: 0 })
-    students_count: number; // Количество студентов
+    students_count: number; // Количество студентов на этом уровне
 
-    @Prop({ type: Number, default: 0, min: 0, max: 5 })
-    average_rating: number; // Средний рейтинг курсов
+    @Prop({ type: Number, min: 0, max: 100, default: 0 })
+    average_completion_rate: number; // Средний процент завершения курсов
 
+    // Системные поля
     createdAt?: Date;
     updatedAt?: Date;
 }
@@ -70,6 +99,6 @@ DifficultyLevelSchema.virtual('courses', {
     foreignField: 'difficultyLevelId'
 });
 
-// Индексы
-DifficultyLevelSchema.index({ level: 1 });
+// Индексы для оптимизации
 DifficultyLevelSchema.index({ isActive: 1 });
+DifficultyLevelSchema.index({ order: 1 });

@@ -1,11 +1,11 @@
-// src/lessons/schemas/lesson.schema.ts - ОБНОВЛЕНО для связи с домашними заданиями
+// src/lessons/schemas/lesson.schema.ts
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema } from 'mongoose';
 
 export type LessonDocument = Lesson & Document;
 
 /**
- * Схема урока с поддержкой домашних заданий
+ * Схема урока
  */
 @Schema({
     timestamps: true,
@@ -93,7 +93,7 @@ export class Lesson {
         size_bytes: number;
     }>;
 
-    // УСТАРЕВШИЕ ПОЛЯ домашнего задания (оставлены для совместимости)
+    // Домашнее задание
     @Prop({ type: String })
     homework_description: string; // Описание домашнего задания
 
@@ -120,16 +120,6 @@ export class Lesson {
 
     @Prop({ type: Number, min: 0, max: 100 })
     homework_max_score?: number; // Максимальная оценка за домашнее задание
-
-    // НОВЫЕ ПОЛЯ для статистики домашних заданий
-    @Prop({ type: Number, default: 0 })
-    homework_count: number; // Количество домашних заданий в уроке
-
-    @Prop({ type: Number, default: 0 })
-    homework_submissions_count: number; // Общее количество отправок по всем заданиям
-
-    @Prop({ type: Number, default: 0, min: 0, max: 5 })
-    homework_average_score: number; // Средняя оценка по всем домашним заданиям урока
 
     // Статусы урока
     @Prop({ default: true })
@@ -168,14 +158,6 @@ LessonSchema.virtual('course', {
     justOne: true
 });
 
-// НОВОЕ: Виртуальное поле для домашних заданий
-LessonSchema.virtual('homeworks', {
-    ref: 'Homework',
-    localField: '_id',
-    foreignField: 'lessonId'
-});
-
-// НОВОЕ: Виртуальное поле для отправок домашних заданий
 LessonSchema.virtual('homework_submissions', {
     ref: 'HomeworkSubmission',
     localField: '_id',
@@ -187,32 +169,6 @@ LessonSchema.index({ courseId: 1 });
 LessonSchema.index({ isActive: 1, isPublished: 1 });
 LessonSchema.index({ isFree: 1 });
 LessonSchema.index({ order: 1 });
-LessonSchema.index({ homework_count: 1 }); // НОВЫЙ индекс для домашних заданий
 
 // Уникальный индекс для предотвращения дублирования порядка уроков в одном курсе
 LessonSchema.index({ courseId: 1, order: 1 }, { unique: true });
-
-/**
- * Объяснение изменений в схеме уроков:
- * 
- * 1. **ОБРАТНАЯ СОВМЕСТИМОСТЬ:**
- *    - Оставлены старые поля homework_* для совместимости
- *    - Новые задания используют отдельную коллекцию Homework
- * 
- * 2. **НОВЫЕ ПОЛЯ СТАТИСТИКИ:**
- *    - homework_count - количество заданий в уроке
- *    - homework_submissions_count - общее количество отправок
- *    - homework_average_score - средняя оценка по заданиям
- * 
- * 3. **ВИРТУАЛЬНЫЕ ПОЛЯ:**
- *    - homeworks - связь с коллекцией домашних заданий
- *    - homework_submissions - связь с отправками заданий
- * 
- * 4. **ИНДЕКСЫ:**
- *    - Добавлен индекс для homework_count для быстрой фильтрации
- * 
- * Использование:
- * - Можно получить все задания урока через populate('homeworks')
- * - Статистика обновляется автоматически при добавлении/удалении заданий
- * - Поддерживается как старый, так и новый формат домашних заданий
- */

@@ -1,8 +1,7 @@
-// src/lessons/lessons.service.ts - ДОПОЛНЕНИЯ для работы с домашними заданиями
+// src/lessons/lessons.service.ts
 import { Injectable, NotFoundException, ConflictException, Logger, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import * as mongoose from 'mongoose';
 import { Lesson, LessonDocument } from './schemas/lesson.schema';
 import { Course, CourseDocument } from '../courses/schemas/course.schema';
 import { CreateLessonDto } from './dto/create-lesson.dto';
@@ -50,11 +49,7 @@ export class LessonsService {
             courseId,
             isActive: true,
             isPublished: false,
-            isFree: false,
-            // Инициализируем счетчики домашних заданий
-            homework_count: 0,
-            homework_submissions_count: 0,
-            homework_average_score: 0
+            isFree: false
         });
 
         const savedLesson = await newLesson.save();
@@ -67,9 +62,9 @@ export class LessonsService {
     }
 
     /**
-     * Получение уроков курса с домашними заданиями
+     * Получение уроков курса
      */
-    async findByCourse(courseId: string, includeUnpublished = false, includeHomeworks = false): Promise<LessonDocument[]> {
+    async findByCourse(courseId: string, includeUnpublished = false): Promise<LessonDocument[]> {
         const course = await this.courseModel.findById(courseId).exec();
         if (!course) {
             throw new NotFoundException(`Курс с ID ${courseId} не найден`);
@@ -80,35 +75,17 @@ export class LessonsService {
             filter.isPublished = true;
         }
 
-        let query = this.lessonModel.find(filter).sort({ order: 1 });
-
-        // Опционально загружаем домашние задания
-        if (includeHomeworks) {
-            query = query.populate({
-                path: 'homeworks',
-                match: { isActive: true, isPublished: true },
-                select: 'title description deadline max_score submissions_count average_score'
-            });
-        }
-
-        return query.exec();
+        return this.lessonModel
+            .find(filter)
+            .sort({ order: 1 })
+            .exec();
     }
 
     /**
-     * Получение урока по ID с домашними заданиями
+     * Получение урока по ID
      */
-    async findById(id: string, includeHomeworks = false): Promise<LessonDocument | null> {
-        let query = this.lessonModel.findById(id).populate('courseId', 'title teacherId');
-
-        if (includeHomeworks) {
-            query = query.populate({
-                path: 'homeworks',
-                match: { isActive: true },
-                select: 'title description deadline max_score isPublished submissions_count average_score'
-            });
-        }
-
-        return query.exec();
+    async findById(id: string): Promise<LessonDocument | null> {
+        return this.lessonModel.findById(id).populate('courseId', 'title teacherId').exec();
     }
 
     /**
@@ -163,19 +140,6 @@ export class LessonsService {
         if (!isAdmin && course.teacherId.toString() !== userId) {
             throw new BadRequestException('У вас нет прав на удаление этого урока');
         }
-
-        // Проверяем, есть ли отправленные домашние задания
-        // Временная заглушка - будет реализовано после создания HomeworkSubmission модели
-        // const submissionsCount = await this.homeworkSubmissionModel.countDocuments({
-        //     lessonId: id
-        // }).exec();
-
-        // if (submissionsCount > 0) {
-        //     throw new ConflictException(
-        //         `Нельзя удалить урок с ${submissionsCount} отправленными домашними заданиями. ` +
-        //         'Сначала удалите все связанные домашние задания.'
-        //     );
-        // }
 
         const courseId = lesson.courseId;
 
@@ -252,71 +216,6 @@ export class LessonsService {
     }
 
     /**
-     * НОВЫЙ МЕТОД: Обновление статистики домашних заданий урока
-     */
-    async updateHomeworkStatistics(lessonId: string): Promise<void> {
-        try {
-            // Временная заглушка - будет реализовано после создания HomeworkSubmission модели
-            this.logger.debug(`Обновление статистики ДЗ для урока ${lessonId} - заглушка`);
-
-            // Обновляем урок с базовыми значениями
-            await this.lessonModel.findByIdAndUpdate(lessonId, {
-                homework_count: 0,
-                homework_submissions_count: 0,
-                homework_average_score: 0
-            }).exec();
-
-        } catch (error) {
-            this.logger.error(`Ошибка обновления статистики ДЗ для урока ${lessonId}: ${error.message}`);
-        }
-    }
-
-    /**
-     * НОВЫЙ МЕТОД: Получение домашних заданий урока
-     */
-    async getLessonHomeworkSubmissions(
-        lessonId: string,
-        status?: string,
-        page: number = 1,
-        limit: number = 20
-    ): Promise<{ submissions: any[]; totalItems: number; totalPages: number }> {
-        // Временная заглушка - будет реализовано после создания HomeworkSubmission модели
-        this.logger.debug(`Получение ДЗ урока ${lessonId} - заглушка`);
-
-        return {
-            submissions: [],
-            totalItems: 0,
-            totalPages: 0
-        };
-    }
-
-    /**
-     * НОВЫЙ МЕТОД: Получение прогресса урока с учетом домашних заданий
-     */
-    async getLessonProgress(lessonId: string): Promise<any> {
-        const lesson = await this.lessonModel.findById(lessonId).exec();
-        if (!lesson) {
-            throw new NotFoundException(`Урок с ID ${lessonId} не найден`);
-        }
-
-        // Временная заглушка - будет реализовано после создания HomeworkSubmission модели
-        const stats = {
-            lessonId: lessonId,
-            homeworkCount: lesson.homework_count,
-            totalSubmissions: lesson.homework_submissions_count,
-            averageScore: lesson.homework_average_score,
-            submissionsByStatus: {
-                submitted: 0,
-                in_review: 0,
-                reviewed: 0,
-                returned_for_revision: 0
-            }
-        };
-
-        return stats;
-    }
-
-    /**
      * Обновление количества уроков в курсе
      */
     private async updateCourseLessonsCount(courseId: string): Promise<void> {
@@ -328,6 +227,35 @@ export class LessonsService {
         await this.courseModel.findByIdAndUpdate(courseId, {
             lessons_count: lessonsCount
         }).exec();
+    }
+
+    /**
+     * Получение домашних заданий урока
+     */
+    async getLessonHomeworkSubmissions(
+        lessonId: string,
+        status?: string,
+        page: number = 1,
+        limit: number = 20
+    ): Promise<{ submissions: any[]; totalItems: number; totalPages: number }> {
+        // Базовая реализация - расширить при создании модуля домашних заданий
+        return {
+            submissions: [],
+            totalItems: 0,
+            totalPages: 0
+        };
+    }
+
+    /**
+     * Получение прогресса урока
+     */
+    async getLessonProgress(lessonId: string): Promise<any> {
+        // Базовая реализация - расширить при создании системы прогресса
+        return {
+            totalStudents: 0,
+            completedStudents: 0,
+            averageScore: 0
+        };
     }
 
     /**
@@ -387,11 +315,7 @@ export class LessonsService {
             title: newTitle,
             courseId: courseId,
             order: newOrder,
-            isPublished: false,
-            // Сбрасываем статистику домашних заданий
-            homework_count: 0,
-            homework_submissions_count: 0,
-            homework_average_score: 0
+            isPublished: false
         });
 
         const savedLesson = await duplicatedLesson.save();
@@ -403,28 +327,3 @@ export class LessonsService {
         return savedLesson;
     }
 }
-
-/**
- * Объяснение дополнений в LessonsService:
- * 
- * 1. **НОВЫЕ МЕТОДЫ ДЛЯ ДОМАШНИХ ЗАДАНИЙ:**
- *    - updateHomeworkStatistics() - обновление статистики ДЗ урока
- *    - getLessonHomeworkSubmissions() - получение отправок ДЗ урока
- *    - getLessonProgress() - прогресс урока с учетом ДЗ
- * 
- * 2. **ОБНОВЛЕННЫЕ МЕТОДЫ:**
- *    - findByCourse() - опция загрузки домашних заданий
- *    - findById() - опция загрузки домашних заданий
- *    - create() - инициализация счетчиков ДЗ
- *    - delete() - проверка на наличие отправленных ДЗ
- * 
- * 3. **СТАТИСТИКА:**
- *    - Автоматическое обновление счетчиков при изменениях
- *    - Агрегация данных по статусам отправок
- *    - Расчет средних оценок
- * 
- * 4. **ИНТЕГРАЦИЯ:**
- *    - Связь с HomeworkSubmission моделью
- *    - Обновление статистики при операциях с ДЗ
- *    - Проверка зависимостей при удалении
- */
