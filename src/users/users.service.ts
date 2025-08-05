@@ -262,7 +262,7 @@ export class UsersService {
             await user.save();
 
             // Формируем URL для верификации
-            const verificationUrl = `${process.env.APP_URL || 'http://localhost:8000'}/auth/verify-email?token=${user.verificationToken}`;
+            const verificationUrl = `${process.env.APP_URL || 'http://localhost:3000'}/auth/verify-email?token=${user.verificationToken}`;
 
             // Отправляем уведомления об изменении email
             try {

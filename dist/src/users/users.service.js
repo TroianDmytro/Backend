@@ -199,7 +199,7 @@ let UsersService = UsersService_1 = class UsersService {
             verificationTokenExpires.setHours(verificationTokenExpires.getHours() + 24);
             user.verificationTokenExpires = verificationTokenExpires;
             await user.save();
-            const verificationUrl = `${process.env.APP_URL || 'http://localhost:3000'}/auth/verify-email?token=${user.verificationToken}`;
+            const verificationUrl = `${process.env.APP_URL || 'http://localhost:8000'}/auth/verify-email?token=${user.verificationToken}`;
             try {
                 await this.emailService.sendEmailChangeNotification(oldEmail, user.email, verificationUrl);
             }

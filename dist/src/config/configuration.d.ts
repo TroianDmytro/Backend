@@ -1,5 +1,6 @@
 declare const _default: () => {
     port: number;
+    host: string;
     database: {
         uri: string;
     };
@@ -14,9 +15,19 @@ declare const _default: () => {
         user: string;
         password: string;
         from: string;
+        fromName: string;
     };
     app: {
         url: string;
+        allowedOrigins: string[];
+        globalPrefix: string;
+    };
+    swagger: {
+        enabled: boolean;
+        path: string;
+        title: string;
+        description: string;
+        version: string;
     };
 };
 export default _default;

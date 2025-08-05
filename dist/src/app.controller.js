@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppController = void 0;
 const common_1 = require("@nestjs/common");
+const swagger_1 = require("@nestjs/swagger");
 const app_service_1 = require("./app.service");
 let AppController = class AppController {
     appService;
@@ -20,15 +21,59 @@ let AppController = class AppController {
     getHello() {
         return this.appService.getHello();
     }
+    getHealth() {
+        return {
+            status: 'ok',
+            timestamp: new Date().toISOString(),
+            uptime: process.uptime(),
+        };
+    }
 };
 exports.AppController = AppController;
 __decorate([
     (0, common_1.Get)(),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Проверка работоспособности API',
+        description: 'Возвращает приветственное сообщение для проверки работы API'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'API работает корректно',
+        schema: {
+            type: 'string',
+            example: 'Hello World!'
+        }
+    }),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", String)
 ], AppController.prototype, "getHello", null);
+__decorate([
+    (0, common_1.Get)('health'),
+    (0, common_1.HttpCode)(common_1.HttpStatus.OK),
+    (0, swagger_1.ApiOperation)({
+        summary: 'Health check endpoint',
+        description: 'Проверка состояния сервиса'
+    }),
+    (0, swagger_1.ApiResponse)({
+        status: 200,
+        description: 'Сервис работает',
+        schema: {
+            type: 'object',
+            properties: {
+                status: { type: 'string', example: 'ok' },
+                timestamp: { type: 'string', example: '2025-01-01T00:00:00.000Z' },
+                uptime: { type: 'number', example: 12345 }
+            }
+        }
+    }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], AppController.prototype, "getHealth", null);
 exports.AppController = AppController = __decorate([
+    (0, swagger_1.ApiTags)('app'),
     (0, common_1.Controller)(),
     __metadata("design:paramtypes", [app_service_1.AppService])
 ], AppController);

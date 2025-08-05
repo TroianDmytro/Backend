@@ -10,7 +10,6 @@ exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const config_1 = require("@nestjs/config");
-const secrets_config_1 = require("./config/secrets.config");
 const auth_module_1 = require("./auth/auth.module");
 const users_module_1 = require("./users/users.module");
 const email_module_1 = require("./email/email.module");
@@ -23,6 +22,7 @@ const lessons_module_1 = require("./lessons/lessons.module");
 const subscriptions_module_1 = require("./subscriptions/subscriptions.module");
 const categories_module_1 = require("./categories/categories.module");
 const difficulty_levels_module_1 = require("./difficulty-levels/difficulty-levels.module");
+const configuration_1 = require("./config/configuration");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -30,19 +30,35 @@ exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
             config_1.ConfigModule.forRoot({
+                load: [configuration_1.default],
                 isGlobal: true,
-                cache: true,
             }),
-            mongoose_1.MongooseModule.forRoot(secrets_config_1.SecretsConfig.getAllSecrets().mongodbUri, {
-                connectionFactory: (connection) => {
-                    connection.on('connected', () => {
-                        console.log('✅ MongoDB успешно подключена');
-                    });
-                    connection.on('error', (error) => {
-                        console.error('❌ Ошибка подключения к MongoDB:', error);
-                    });
-                    return connection;
+            mongoose_1.MongooseModule.forRootAsync({
+                imports: [config_1.ConfigModule],
+                useFactory: async (configService) => {
+                    const mongoUri = configService.get('database.uri');
+                    console.log('🔗 Подключение к MongoDB...');
+                    console.log('📍 URI:', mongoUri ? 'Найден' : 'Не найден, используется fallback');
+                    return {
+                        uri: mongoUri,
+                        retryWrites: true,
+                        w: 'majority',
+                        connectionFactory: (connection) => {
+                            connection.on('connected', () => {
+                                console.log('✅ MongoDB успешно подключена');
+                                console.log(`📦 База данных: ${connection.db?.databaseName || 'неизвестно'}`);
+                            });
+                            connection.on('error', (error) => {
+                                console.error('❌ Ошибка подключения к MongoDB:', error.message);
+                            });
+                            connection.on('disconnected', () => {
+                                console.log('⚠️ MongoDB отключена');
+                            });
+                            return connection;
+                        },
+                    };
                 },
+                inject: [config_1.ConfigService],
             }),
             roles_module_1.RolesModule,
             users_module_1.UsersModule,
