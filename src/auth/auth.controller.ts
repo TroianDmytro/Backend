@@ -3,7 +3,7 @@ import { Controller, Post, Body, Get, Param, Query, Logger, Request, NotFoundExc
 import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
-import { CreateUserDto } from '../users/dto/create-user.dto';
+import { CreateUserDto, VerifyEmailCodeDto } from '../users/dto/create-user.dto';
 import { LoginUserDto } from '../users/dto/login-user.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
@@ -14,26 +14,88 @@ export class AuthController {
 
     constructor(private authService: AuthService) { }
 
-    @Post('register')
-    @ApiOperation({ summary: 'Регистрация нового пользователя' })
-    @ApiResponse({ status: 201, description: 'Пользователь успешно зарегистрирован' })
-    @ApiResponse({ status: 400, description: 'Некорректные данные' })
-    async register(@Body() createUserDto: CreateUserDto) {
-        this.logger.log(`Запрос на регистрацию: ${createUserDto.email}`);
-        return this.authService.register(createUserDto);
+    @Post('register/send-code')
+    @ApiOperation({
+        summary: 'Шаг 1: Отправка кода подтверждения на email',
+        description: 'Пользователь вводит только email, получает 6-значный код подтверждения'
+    })
+    @ApiResponse({ status: 201, description: 'Код подтверждения отправлен на email' })
+    @ApiResponse({ status: 400, description: 'Некорректный email' })
+    @ApiResponse({ status: 409, description: 'Пользователь уже зарегистрирован' })
+    @ApiBody({ type: CreateUserDto })
+    async sendVerificationCode(@Body() createUserDto: CreateUserDto) {
+        this.logger.log(`Запрос на отправку кода подтверждения: ${createUserDto.email}`);
+        return this.authService.sendVerificationCode(createUserDto);
+    }
+
+    @Post('register/verify-code')
+    @ApiOperation({
+        summary: 'Шаг 2: Подтверждение кода и завершение регистрации',
+        description: 'Пользователь вводит код, дополнительные данные и получает логин/пароль на email'
+    })
+    @ApiResponse({
+        status: 201,
+        description: 'Регистрация завершена, логин и пароль отправлены на email'
+    })
+    @ApiResponse({ status: 400, description: 'Неверный или просроченный код' })
+    @ApiBody({ type: VerifyEmailCodeDto })
+    async verifyCodeAndRegister(@Body() verifyDto: VerifyEmailCodeDto) {
+        this.logger.log(`Подтверждение кода для: ${verifyDto.email}`);
+        return this.authService.verifyCodeAndCompleteRegistration(verifyDto);
     }
 
     @Post('login')
-    @ApiOperation({ summary: 'Авторизация пользователя' })
+    @ApiOperation({
+        summary: 'Авторизация пользователя по логину и паролю',
+        description: 'Теперь используется логин вместо email'
+    })
     @ApiResponse({ status: 200, description: 'Успешная авторизация' })
     @ApiResponse({ status: 401, description: 'Неверные учетные данные' })
+    @ApiBody({ type: LoginUserDto })
     async login(@Body() loginUserDto: LoginUserDto) {
-        this.logger.log(`Запрос на вход: ${loginUserDto.email}`);
+        this.logger.log(`Запрос на вход: ${loginUserDto.login}`);
         return this.authService.login(loginUserDto);
     }
 
+    @Post('resend-code')
+    @ApiOperation({
+        summary: 'Повторная отправка кода подтверждения',
+        description: 'Отправляет новый 6-значный код на email'
+    })
+    @ApiResponse({ status: 200, description: 'Новый код отправлен на email' })
+    @ApiResponse({ status: 404, description: 'Пользователь не найден' })
+    @ApiResponse({ status: 409, description: 'Email уже подтвержден' })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                email: { type: 'string', format: 'email', example: 'user@example.com' }
+            },
+            required: ['email']
+        }
+    })
+    async resendVerificationCode(@Body('email') email: string) {
+        if (!email) {
+            this.logger.warn('Попытка повторной отправки без указания email');
+            throw new BadRequestException('Email обязателен');
+        }
+
+        try {
+            this.logger.log(`Запрос на повторную отправку кода: ${email}`);
+            const result = await this.authService.resendVerificationEmail(email);
+            return {
+                success: true,
+                message: result.message
+            };
+        } catch (error) {
+            this.logger.error(`Ошибка при повторной отправке: ${error.message}`);
+            throw error;
+        }
+    }
+
+    // Старый эндпоинт для верификации по токену (для обратной совместимости)
     @Get('verify-email')
-    @ApiOperation({ summary: 'Подтверждение email' })
+    @ApiOperation({ summary: 'Подтверждение email по токену (устаревший метод)' })
     @ApiResponse({ status: 200, description: 'Email успешно подтвержден' })
     @ApiResponse({ status: 404, description: 'Неверный или устаревший токен' })
     @ApiQuery({ name: 'token', description: 'Токен верификации', required: true })
@@ -46,47 +108,12 @@ export class AuthController {
         try {
             this.logger.log(`Верификация email с токеном: ${token.substring(0, 8)}...`);
             const result = await this.authService.verifyEmail(token);
-
-            // Возвращаем HTML страницу с результатом
             return res.send(this.getSuccessPage(result.user.email));
         } catch (error) {
             this.logger.error(`Ошибка верификации email: ${error.message}`);
             return res.status(400).send(this.getErrorPage(error.message));
         }
     }
-
-
-    @Get('resend-verification/:email')
-    @ApiOperation({ summary: 'Повторная отправка письма с подтверждением email' })
-    @ApiResponse({ status: 200, description: 'Письмо успешно отправлено' })
-    @ApiResponse({ status: 404, description: 'Пользователь не найден' })
-    @ApiResponse({ status: 409, description: 'Email уже подтвержден' })
-    @ApiParam({ name: 'email', description: 'Email пользователя', required: true })
-    async resendVerificationEmail(@Param('email') email: string) {
-        if (!email) {
-            this.logger.warn('Попытка повторной отправки без указания email');
-            return {
-                success: false,
-                message: 'Email не указан'
-            };
-        }
-
-        try {
-            this.logger.log(`Запрос на повторную отправку верификации: ${email}`);
-            await this.authService.resendVerificationEmail(email);
-            return {
-                success: true,
-                message: `Письмо с подтверждением повторно отправлено на ${email}`
-            };
-        } catch (error) {
-            this.logger.error(`Ошибка при повторной отправке: ${error.message}`);
-            return {
-                success: false,
-                message: error.message
-            };
-        }
-    }
-
 
     @Post('forgot-password')
     @ApiOperation({ summary: 'Запрос на восстановление пароля' })
@@ -172,15 +199,14 @@ export class AuthController {
         @Request() req,
         @Body() body: { userId?: string; currentPassword: string; newPassword: string }
     ) {
-        // Проверяем, есть ли req.user (работает ли авторизация)
         const userId = req.user?.userId || body.userId;
-        const userEmail = req.user?.email || 'тестовый пользователь';
+        const userLogin = req.user?.login || 'тестовый пользователь';
 
         if (!userId) {
             throw new BadRequestException('userId обязателен при отключенной авторизации');
         }
 
-        this.logger.log(`Пользователь ${userEmail} меняет пароль`);
+        this.logger.log(`Пользователь ${userLogin} меняет пароль`);
 
         try {
             const result = await this.authService.changePassword(
@@ -198,7 +224,7 @@ export class AuthController {
         }
     }
 
-
+    // HTML страницы остаются без изменений
     private getSuccessPage(email: string): string {
         return `
     <!DOCTYPE html>
@@ -355,7 +381,7 @@ export class AuthController {
             </div>
             <h1>Ошибка подтверждения</h1>
             <p class="message">${message}</p>
-            <a href="/resend-verification" class="button">Отправить письмо повторно</a>
+            <a href="/resend-verification" class="button">Отправить код повторно</a>
         </div>
     </body>
     </html>

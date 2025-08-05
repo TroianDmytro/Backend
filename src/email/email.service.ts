@@ -20,7 +20,87 @@ export class EmailService {
     }
 
     /**
-     * Отправка письма подтверждения email
+     * Отправка 6-значного кода подтверждения на email
+     */
+    async sendVerificationCode(email: string, code: string): Promise<void> {
+        const subject = 'Код подтверждения регистрации';
+        const html = `
+            <h2>Добро пожаловать на нашу образовательную платформу!</h2>
+            <p>Вы начали процесс регистрации на нашей платформе.</p>
+            <p>Ваш код подтверждения:</p>
+            <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
+                <h1 style="font-family: monospace; font-size: 36px; color: #007bff; letter-spacing: 5px; margin: 0;">
+                    ${code}
+                </h1>
+            </div>
+            <p>Введите этот код на странице регистрации для продолжения.</p>
+            <p><strong>Код действителен в течение 15 минут.</strong></p>
+            <p>Если вы не регистрировались на нашей платформе, просто проигнорируйте это письмо.</p>
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+            <p style="color: #666; font-size: 12px;">
+                Это автоматическое письмо, не отвечайте на него.
+            </p>
+        `;
+
+        await this.sendEmail(email, subject, html);
+    }
+
+    /**
+     * Отправка логина и пароля после успешной регистрации
+     */
+    async sendLoginCredentials(email: string, login: string, password: string, name?: string): Promise<void> {
+        const subject = 'Ваши учетные данные для входа';
+        const html = `
+            <h2>Регистрация завершена успешно!</h2>
+            <p>Здравствуйте${name ? `, ${name}` : ''}!</p>
+            <p>Ваша регистрация на образовательной платформе завершена.</p>
+            
+            <div style="background-color: #e8f5e8; padding: 20px; border-radius: 8px; border-left: 4px solid #28a745; margin: 20px 0;">
+                <h3 style="margin-top: 0; color: #28a745;">Ваши учетные данные:</h3>
+                <p style="margin: 10px 0;"><strong>Логин:</strong> 
+                    <span style="font-family: monospace; background-color: #f8f9fa; padding: 2px 6px; border-radius: 4px; font-size: 16px;">
+                        ${login}
+                    </span>
+                </p>
+                <p style="margin: 10px 0;"><strong>Пароль:</strong> 
+                    <span style="font-family: monospace; background-color: #f8f9fa; padding: 2px 6px; border-radius: 4px; font-size: 16px;">
+                        ${password}
+                    </span>
+                </p>
+            </div>
+
+            <div style="background-color: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 20px 0;">
+                <h4 style="margin-top: 0; color: #856404;">🔒 Важные рекомендации по безопасности:</h4>
+                <ul style="color: #856404; margin: 10px 0 0 20px;">
+                    <li>Сохраните эти данные в надежном месте</li>
+                    <li>Не передавайте пароль третьим лицам</li>
+                    <li>Рекомендуем изменить пароль после первого входа</li>
+                    <li>Пароль содержит: заглавные буквы, цифры и специальные символы</li>
+                </ul>
+            </div>
+
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="${process.env.APP_URL || 'http://localhost:3000'}/login" 
+                   style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                    Войти в систему
+                </a>
+            </div>
+
+            <p>Теперь вы можете войти в систему, используя указанные выше учетные данные.</p>
+            <p>Добро пожаловать в нашу образовательную платформу! 🎓</p>
+            
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+            <p style="color: #666; font-size: 12px;">
+                Это автоматическое письмо, не отвечайте на него.<br>
+                Если у вас возникли проблемы со входом, обратитесь в службу поддержки.
+            </p>
+        `;
+
+        await this.sendEmail(email, subject, html);
+    }
+
+    /**
+     * Отправка письма подтверждения email (старый метод для обратной совместимости)
      */
     async sendVerificationEmail(email: string, verificationUrl: string, name?: string): Promise<void> {
         const subject = 'Подтверждение регистрации';
@@ -58,6 +138,13 @@ export class EmailService {
         `;
 
         await this.sendEmail(email, subject, html);
+    }
+
+    /**
+     * Отправка кода сброса пароля (синоним для совместимости)
+     */
+    async sendResetPasswordCode(email: string, resetCode: string, name?: string): Promise<void> {
+        return this.sendPasswordResetCode(email, resetCode, name);
     }
 
     /**

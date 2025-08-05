@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { EmailService } from '../email/email.service';
-import { CreateUserDto } from '../users/dto/create-user.dto';
+import { CreateUserDto, VerifyEmailCodeDto } from '../users/dto/create-user.dto';
 import { LoginUserDto } from '../users/dto/login-user.dto';
 import { use } from 'passport';
 
@@ -14,12 +14,111 @@ export class AuthService {
         private jwtService: JwtService,
         private emailService: EmailService,
     ) { }
+    // Генерация случайного пароля
+    private generateSecurePassword(): string {
+        const lowercase = 'abcdefghijklmnopqrstuvwxyz';
+        const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        const digits = '0123456789';
+        const specialChars = '!@#$%^&*()_+-=[]{}|;:,.<>?';
 
-    async validateUser(email: string, pass: string): Promise<any> {
-        const user = await this.usersService.findOne(email);
+        let password = '';
+
+        // Гарантируем наличие каждого типа символов
+        password += uppercase[Math.floor(Math.random() * uppercase.length)]; // 1 заглавная
+        password += digits[Math.floor(Math.random() * digits.length)]; // 1 цифра
+        password += specialChars[Math.floor(Math.random() * specialChars.length)]; // 1 спец символ
+
+        // Добавляем остальные 5 символов случайно
+        const allChars = lowercase + uppercase + digits + specialChars;
+        for (let i = 3; i < 8; i++) {
+            password += allChars[Math.floor(Math.random() * allChars.length)];
+        }
+
+        // Перемешиваем символы для случайного порядка
+        return password.split('').sort(() => Math.random() - 0.5).join('');
+    }
+
+    // Генерация уникального логина на основе email
+    private generateLogin(email: string): string {
+        const emailPart = email.split('@')[0];
+        const randomSuffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+        return `${emailPart}${randomSuffix}`;
+    }
+
+    // Отправка кода подтверждения на email
+    async sendVerificationCode(createUserDto: CreateUserDto) {
+        const { email } = createUserDto;
+
+        // Проверяем, не зарегистрирован ли уже пользователь
+        const existingUser = await this.usersService.findOne(email);
+        if (existingUser && existingUser.isEmailVerified) {
+            throw new ConflictException('Пользователь с таким email уже зарегистрирован');
+        }
+
+        // Генерируем 6-значный код
+        const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+        // Сохраняем код в временном хранилище или обновляем существующего пользователя
+        await this.usersService.saveVerificationCode(email, verificationCode);
+
+        // Отправляем код на email
+        await this.emailService.sendVerificationCode(email, verificationCode);
+
+        return {
+            success: true,
+            message: 'Код подтверждения отправлен на ваш email. Проверьте почту.',
+            email: email
+        };
+    }
+
+    // Подтверждение кода и завершение регистрации
+    async verifyCodeAndCompleteRegistration(verifyDto: VerifyEmailCodeDto) {
+        const { email, code, name, second_name, age, telefon_number } = verifyDto;
+
+        // Проверяем код подтверждения
+        const isValidCode = await this.usersService.verifyCode(email, code);
+        if (!isValidCode) {
+            throw new BadRequestException('Неверный или просроченный код подтверждения');
+        }
+
+        // Генерируем логин и пароль
+        const login = this.generateLogin(email);
+        const password = this.generateSecurePassword();
+
+        // Создаем пользователя с сгенерированными данными
+        const user = await this.usersService.createWithCredentials({
+            email,
+            login,
+            password,
+            name,
+            second_name,
+            age,
+            telefon_number
+        });
+
+        // Отправляем логин и пароль на email
+        await this.emailService.sendLoginCredentials(email, login, password, name);
+
+        return {
+            success: true,
+            message: 'Регистрация завершена! Логин и пароль отправлены на ваш email.',
+            user: {
+                id: user.id,
+                email: user.email,
+                login: user.login,
+                name: user.name,
+                second_name: user.second_name,
+                isEmailVerified: user.isEmailVerified
+            }
+        };
+    }
+
+    async validateUser(login: string, pass: string): Promise<any> {
+        // Теперь ищем по логину вместо email
+        const user = await this.usersService.findByLogin(login);
 
         if (!user) {
-            throw new UnauthorizedException('Неверный email или пароль');
+            throw new UnauthorizedException('Неверный логин или пароль');
         }
 
         // Проверка на блокировку
@@ -30,7 +129,7 @@ export class AuthService {
         const isPasswordValid = await bcrypt.compare(pass, user.password);
 
         if (!isPasswordValid) {
-            throw new UnauthorizedException('Неверный email или пароль');
+            throw new UnauthorizedException('Неверный логин или пароль');
         }
 
         if (!user.isEmailVerified) {
@@ -41,7 +140,7 @@ export class AuthService {
     }
 
     async login(loginUserDto: LoginUserDto) {
-        const user = await this.validateUser(loginUserDto.email, loginUserDto.password);
+        const user = await this.validateUser(loginUserDto.login, loginUserDto.password);
 
         // Преобразуем роли в массив строк
         const roles = user.roles?.map(role =>
@@ -51,6 +150,7 @@ export class AuthService {
         // Включаем роли в payload токена
         const payload = {
             email: user.email,
+            login: user.login,
             sub: user._id,
             roles: roles
         };
@@ -59,8 +159,8 @@ export class AuthService {
             access_token: this.jwtService.sign(payload),
             user: {
                 id: user.id,
-                avatar: user.avatar,
                 email: user.email,
+                login: user.login,
                 name: user.name,
                 second_name: user.second_name,
                 isEmailVerified: user.isEmailVerified,
@@ -121,7 +221,6 @@ export class AuthService {
         };
     }
 
-
     async forgotPassword(email: string) {
         const user = await this.usersService.findOne(email);
 
@@ -132,7 +231,7 @@ export class AuthService {
         // Генерируем 6-значный код
         const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-        // Сохраняем код в базе (используем поле resetPasswordToken)
+        // Сохраняем код в базе
         await this.usersService.saveResetCode(email, resetCode);
 
         // Отправляем код на email
@@ -199,18 +298,15 @@ export class AuthService {
             throw new ConflictException('Email уже подтвержден');
         }
 
-        // Генерируем новый токен верификации
-        const newToken = await this.usersService.generateNewVerificationToken(email);
+        // Генерируем новый код верификации
+        const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+        await this.usersService.saveVerificationCode(email, verificationCode);
 
-        // Отправляем письмо с подтверждением
-        await this.emailService.sendVerificationEmail(
-            email,
-            `${process.env.APP_URL}/auth/verify-email?token=${newToken}`,
-            user.name
-        );
+        // Отправляем письмо с кодом
+        await this.emailService.sendVerificationCode(email, verificationCode);
 
         return {
-            message: 'Письмо с подтверждением повторно отправлено. Пожалуйста, проверьте вашу почту',
+            message: 'Новый код подтверждения отправлен. Пожалуйста, проверьте вашу почту',
         };
     }
 }

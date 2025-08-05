@@ -9,37 +9,133 @@ import { v4 as uuidv4 } from 'uuid';
 import { RolesService } from '../roles/roles.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { EmailService } from 'src/email/email.service';
+import { CreateWithCredentialsDto } from './interfaces/create-credentials.interface';
 
 @Injectable()
 export class UsersService {
     private readonly logger = new Logger(UsersService.name);
+
     constructor(
         @InjectModel(User.name) private userModel: Model<UserDocument>,
         private rolesService: RolesService,
         private readonly emailService: EmailService
     ) { }
 
+
+    //Поиск пользователя по email
     async findOne(email: string): Promise<User | null> {
         return this.userModel.findOne({ email }).populate('roles').exec();
     }
 
-    async findByVerificationToken(token: string): Promise<User | null> {
-        return this.userModel.findOne({
-            verificationToken: token,
-            verificationTokenExpires: { $gt: new Date() }
-        }).populate('roles').exec();
+    //Поиск пользователя по логину
+    async findByLogin(login: string): Promise<User | null> {
+        return this.userModel.findOne({ login }).populate('roles').exec();
     }
 
-    async findAll(): Promise<UserDocument[]> {
-        return this.userModel
-            .find()
-            .populate('roles')
-            .select('-password -verificationToken -resetPasswordToken -verificationTokenExpires -resetPasswordExpires')
-            .exec();
+    //Поиск пользователя по ID
+    async findById(id: string): Promise<UserDocument | null> {
+        return this.userModel.findById(id).populate('roles').exec();
     }
 
+    //Сохранение кода верификации для email
+    async saveVerificationCode(email: string, code: string): Promise<void> {
+        const codeExpires = new Date();
+        codeExpires.setMinutes(codeExpires.getMinutes() + 15); // Код действителен 15 минут
+
+        // Проверяем, есть ли уже пользователь с таким email
+        const existingUser = await this.userModel.findOne({ email }).exec();
+
+        if (existingUser) {
+            // Обновляем код для существующего пользователя
+            existingUser.verificationCode = code;
+            existingUser.verificationCodeExpires = codeExpires;
+            await existingUser.save();
+        } else {
+            // Создаем временную запись пользователя только с email и кодом
+            const tempUser = new this.userModel({
+                email,
+                login: `temp_${Date.now()}`, // Временный логин
+                password: 'temp_password', // Временный пароль
+                verificationCode: code,
+                verificationCodeExpires: codeExpires,
+                isEmailVerified: false,
+                roles: [] // Пустые роли пока что
+            });
+            await tempUser.save();
+        }
+    }
+
+    //Проверка кода верификации
+    async verifyCode(email: string, code: string): Promise<boolean> {
+        const user = await this.userModel.findOne({
+            email,
+            verificationCode: code,
+            verificationCodeExpires: { $gt: new Date() }
+        }).exec();
+
+        return !!user;
+    }
+
+    //Создание пользователя с готовыми учетными данными
+    async createWithCredentials(data: CreateWithCredentialsDto): Promise<UserDocument> {
+        const { email, login, password, name, second_name, age, telefon_number } = data;
+
+        // Проверяем уникальность логина
+        const existingUserByLogin = await this.userModel.findOne({ login }).exec();
+        if (existingUserByLogin && existingUserByLogin.login !== `temp_${Date.now()}`) {
+            throw new ConflictException('Пользователь с таким логином уже существует');
+        }
+
+        // Хешируем пароль
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Получаем базовую роль
+        const userRole = await this.rolesService.getUserRole();
+
+        // Ищем существующую временную запись или создаем новую
+        let user = await this.userModel.findOne({ email }).exec();
+
+        if (user) {
+            // Обновляем существующего пользователя
+            user.login = login;
+            user.password = hashedPassword;
+            if (name !== undefined) user.name = name;
+            if (second_name !== undefined) user.second_name = second_name;
+            if (age !== undefined) user.age = age;
+            if (telefon_number !== undefined) user.telefon_number = telefon_number;
+            user.isEmailVerified = true;
+            user.verificationCode = null;
+            user.verificationCodeExpires = null;
+            user.roles = [userRole._id as any];
+
+            await user.save();
+        } else {
+            // Создаем нового пользователя
+            user = new this.userModel({
+                email,
+                login,
+                password: hashedPassword,
+                name: name || undefined,
+                second_name: second_name || undefined,
+                age: age || undefined,
+                telefon_number: telefon_number || undefined,
+                isEmailVerified: true,
+                roles: [userRole._id as any]
+            });
+
+            await user.save();
+        }
+
+        const result = await this.userModel.findById(user._id).populate('roles').exec();
+        if (!result) {
+            throw new NotFoundException('Ошибка при создании пользователя');
+        }
+        return result;
+    }
+
+    //Старый метод создания пользователя (для обратной совместимости)
     async create(createUserDto: CreateUserDto): Promise<User | null> {
-        const { email, password, name, second_name, age, telefon_number } = createUserDto;
+        const { email } = createUserDto;
 
         // Проверка на существование пользователя
         const existingUser = await this.userModel.findOne({ email }).exec();
@@ -47,24 +143,22 @@ export class UsersService {
             throw new ConflictException('Пользователь с таким email уже существует');
         }
 
-        // Хеширование пароля
-        const hashedPassword = await bcrypt.hash(password, 10);
+        // Для старого метода генерируем временные данные
+        const tempPassword = Math.random().toString(36).substring(2, 15);
+        const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
-        // Создание токена верификации
+        // Создание токена верификации (старый метод)
         const verificationToken = uuidv4();
         const verificationTokenExpires = new Date();
-        verificationTokenExpires.setHours(verificationTokenExpires.getHours() + 24); // Токен действителен 24 часа
+        verificationTokenExpires.setHours(verificationTokenExpires.getHours() + 24);
 
         // Получение базовой роли 'user'
         const userRole = await this.rolesService.getUserRole();
 
         const newUser = new this.userModel({
             email,
+            login: `user_${Date.now()}`, // Временный логин
             password: hashedPassword,
-            name,
-            second_name,
-            age,
-            telefon_number,
             verificationToken,
             verificationTokenExpires,
             isEmailVerified: false,
@@ -73,6 +167,21 @@ export class UsersService {
 
         const savedUser = await newUser.save();
         return this.userModel.findById(savedUser._id).populate('roles').exec();
+    }
+
+    async findAll(): Promise<UserDocument[]> {
+        return this.userModel
+            .find()
+            .populate('roles')
+            .select('-password -verificationToken -resetPasswordToken -verificationTokenExpires -resetPasswordExpires -verificationCode -verificationCodeExpires')
+            .exec();
+    }
+
+    async findByVerificationToken(token: string): Promise<User | null> {
+        return this.userModel.findOne({
+            verificationToken: token,
+            verificationTokenExpires: { $gt: new Date() }
+        }).populate('roles').exec();
     }
 
     async verifyEmail(token: string): Promise<User> {
@@ -217,10 +326,6 @@ export class UsersService {
         return user.save();
     }
 
-    async findById(id: string): Promise<UserDocument | null> {
-        return this.userModel.findById(id).populate('roles').exec();
-    }
-
     async updateUser(id: string, updateUserDto: UpdateUserDto, isAdmin: boolean = false): Promise<UserDocument> {
         // Проверяем существование пользователя
         const user = await this.findById(id);
@@ -230,7 +335,6 @@ export class UsersService {
 
         // Если пользователь не админ, удаляем критические поля из обновления
         if (!isAdmin) {
-            // Удаляем эти поля
             delete (updateUserDto as any).roles;
             delete (updateUserDto as any).isBlocked;
             delete (updateUserDto as any).isEmailVerified;
@@ -269,7 +373,6 @@ export class UsersService {
                 await this.emailService.sendEmailChangeNotification(oldEmail, user.email, verificationUrl);
             } catch (error) {
                 this.logger.error(`Ошибка при отправке уведомлений об изменении email: ${error.message}`);
-                // Продолжаем выполнение даже в случае ошибки отправки
             }
         } else {
             // Если email не менялся, обновляем остальные поля
@@ -284,7 +387,7 @@ export class UsersService {
 
             await user.save();
         }
-        // Проверяем результат findById на null
+
         const updatedUser = await this.findById(id);
         if (!updatedUser) {
             throw new NotFoundException(`Пользователь с ID ${id} не найден после обновления`);
@@ -299,9 +402,7 @@ export class UsersService {
             throw new NotFoundException(`Пользователь с ID ${id} не найден`);
         }
 
-        // Обновляем статус блокировки
         user.isBlocked = isBlocked;
-
         return user.save();
     }
 
@@ -314,9 +415,6 @@ export class UsersService {
         await this.userModel.findByIdAndDelete(id);
     }
 
-    /**
-     *  Получение всех пользователей с аватарами
-     */
     async findUsersWithAvatars(): Promise<UserDocument[]> {
         return this.userModel
             .find({ avatarId: { $ne: null } })
@@ -324,17 +422,12 @@ export class UsersService {
             .exec();
     }
 
-    /**
-     * Получение всех пользователей без аватаров
-     */
     async findUsersWithoutAvatars(): Promise<UserDocument[]> {
         return this.userModel
             .find({ $or: [{ avatarId: null }, { avatarId: { $exists: false } }] })
             .populate('roles')
             .exec();
     }
-
-    // Добавьте эти методы в класс UsersService
 
     async saveResetCode(email: string, code: string): Promise<void> {
         const resetTokenExpires = new Date();

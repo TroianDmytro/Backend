@@ -15,10 +15,22 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: any) {
-    const user = await this.usersService.findOne(payload.email);
+    // Пытаемся найти пользователя по email из токена
+    let user = await this.usersService.findOne(payload.email);
+
+    // Если не найден по email, пытаемся найти по логину (для совместимости)
+    if (!user && payload.login) {
+      user = await this.usersService.findByLogin(payload.login);
+    }
 
     if (!user) {
-      return { userId: payload.sub, email: payload.email, isEmailVerified: false, roles: [] };
+      return {
+        userId: payload.sub,
+        email: payload.email,
+        login: payload.login || null,
+        isEmailVerified: false,
+        roles: []
+      };
     }
 
     // Преобразуем роли в массив строк для удобного использования в гвардах
@@ -29,6 +41,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     return {
       userId: payload.sub,
       email: payload.email,
+      login: user.login,
       name: user.name,
       second_name: user.second_name,
       age: user.age,

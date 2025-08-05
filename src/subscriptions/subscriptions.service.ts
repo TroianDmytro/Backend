@@ -289,7 +289,7 @@ export class SubscriptionsService {
             if (user) {
                 await this.emailService.sendSubscriptionCancellationNotification(
                     user.email,
-                    user.name,
+                    user.name || 'Пользователь',
                     reason,
                     immediate
                 );
@@ -393,7 +393,7 @@ export class SubscriptionsService {
             if (user) {
                 await this.emailService.sendSubscriptionActivationNotification(
                     user.email,
-                    user.name
+                    user.name || 'Пользователь',
                 );
             }
         } catch (error) {
@@ -541,7 +541,7 @@ export class SubscriptionsService {
                 if (user && subscription.email_notifications) {
                     await this.emailService.sendSubscriptionExpirationNotification(
                         user.email,
-                        user.name
+                        user.name || 'Пользователь',
                     );
                     notifiedCount++;
                 }
