@@ -7,6 +7,70 @@ import { CreateUserDto, VerifyEmailCodeDto } from '../users/dto/create-user.dto'
 import { LoginUserDto } from '../users/dto/login-user.dto';
 import { use } from 'passport';
 
+const tagsList = [
+    'Cool',
+    'Fast',
+    'Silent',
+    'Smart',
+    'Brave',
+    'Sharp',
+    'Lucky',
+    'Coder',
+    'Wizard',
+    'Ninja',
+    'Dev',
+    'Samurai',
+    'Guru',
+    'Rider',
+    'Maker',
+    'Hero',
+    'Master',
+    'Pro',
+    'Expert',
+    'Sage',
+    'Sensei',
+    'Captain',
+    'Chief',
+    'Fox',
+    'Eagle',
+    'Panther',
+    'Tiger',
+    'Lion',
+    'Dragon',
+    'Phoenix',
+    'Viking',
+    'Knight',
+    'Pirate',
+    'Ranger',
+    'Scout',
+    'Hunter',
+    'Adventurer',
+    'Explorer',
+    'Traveler',
+    'Nomad',
+    'Wanderer',
+    'Pathfinder',
+    'Seeker',
+    'Visionary',
+    'Innovator',
+    'Creator',
+    'Inventor',
+    'Builder',
+    'Architect',
+    'Designer',
+    'Artist',
+    'Craftsman',
+    'Engineer',
+    'Technician',
+    'Mechanic',
+    'Programmer',
+    'Developer',
+    'Hacker',
+    'Debugger',
+    'Scripter',
+    'Assembler',
+];
+
 @Injectable()
 export class AuthService {
     constructor(
@@ -29,7 +93,7 @@ export class AuthService {
         password += specialChars[Math.floor(Math.random() * specialChars.length)]; // 1 спец символ
 
         // Добавляем остальные 5 символов случайно
-        const allChars = lowercase + uppercase + digits + specialChars;
+        const allChars = lowercase + uppercase + digits;
         for (let i = 3; i < 8; i++) {
             password += allChars[Math.floor(Math.random() * allChars.length)];
         }
@@ -40,10 +104,18 @@ export class AuthService {
 
     // Генерация уникального логина на основе email
     private generateLogin(email: string): string {
-        const emailPart = email.split('@')[0];
-        const randomSuffix = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-        return `${emailPart}${randomSuffix}`;
+        const base = email.split('@')[0]
+            .replace(/[^a-zA-Z0-9]/g, '') // убираем лишние символы
+            .slice(0, 10); // ограничим длину
+
+        const tags = tagsList;
+        const tag = tags[Math.floor(Math.random() * tags.length)];
+
+        const number = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+
+        return `${base}${tag}${number}`;
     }
+
 
     // Отправка кода подтверждения на email
     async sendVerificationCode(createUserDto: CreateUserDto) {

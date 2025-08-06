@@ -1,22 +1,72 @@
 // src/email/email.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class EmailService {
+
     private readonly logger = new Logger(EmailService.name);
     private transporter: nodemailer.Transporter;
 
-    constructor() {
-        this.transporter = nodemailer.createTransport({
-            host: process.env.SMTP_HOST || 'smtp.gmail.com',
-            port: parseInt(process.env.SMTP_PORT || '587'),
-            secure: false,
-            auth: {
-                user: process.env.SMTP_USER || '',
-                pass: process.env.SMTP_PASS || '',
-            },
-        });
+    constructor(private configService: ConfigService) {
+        this.createTransporter();
+    }
+
+    private createTransporter() {
+        try {
+            
+            // Проверяем наличие всех переменных окружения
+            const emailHost = this.configService.get<string>('email.host');
+            const emailPort = this.configService.get<string>('email.port');
+            const emailUser = this.configService.get<string>('email.user');
+            const emailPassword = this.configService.get<string>('email.password');
+            const emailSecureBoolean = this.configService.get<string>('email.secure') === 'true';
+
+            // Детальное логирование для диагностики
+            this.logger.log(`🔧 Настройка SMTP: ${emailHost}:${emailPort}`);
+            this.logger.log(`📧 Email пользователь: ${emailUser ? 'ОК' : 'НЕТ'}`);
+            this.logger.log(`🔑 Email пароль: ${emailPassword ? 'ОК' : 'НЕТ'}`);
+            this.logger.log(`🔒 Secure: ${emailSecureBoolean}`);
+
+            if (!emailHost || !emailPort || !emailUser || !emailPassword) {
+                this.logger.warn('⚠️  Не все email переменные окружения настроены');
+                this.logger.warn(`HOST: ${emailHost ? '✅' : '❌'}, PORT: ${emailPort ? '✅' : '❌'}, USER: ${emailUser ? '✅' : '❌'}, PASS: ${emailPassword ? '✅' : '❌'}`);
+                return;
+            }
+
+            this.transporter = nodemailer.createTransport({
+                host: emailHost,
+                port: parseInt(emailPort),
+                secure: emailSecureBoolean, // true для 465, false для других портов
+                auth: {
+                    user: emailUser,
+                    pass: emailPassword,
+                },
+                tls: {
+                    rejectUnauthorized: false, // Для Gmail
+                },
+            });
+
+            // Проверяем соединение асинхронно
+            this.verifyConnection();
+        } catch (error) {
+            this.logger.error('❌ Ошибка создания SMTP транспорта:', error);
+        }
+    }
+
+    private async verifyConnection() {
+        try {
+            if (!this.transporter) {
+                this.logger.error('❌ Транспорт не создан');
+                return;
+            }
+
+            await this.transporter.verify();
+            this.logger.log('✅ SMTP соединение успешно установлено');
+        } catch (error) {
+            this.logger.error(`❌ Ошибка подключения к SMTP серверу: ${error.message}`);
+        }
     }
 
     /**
@@ -312,14 +362,14 @@ export class EmailService {
      */
     private async sendEmail(to: string, subject: string, html: string): Promise<void> {
         try {
-            if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+            if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
                 this.logger.warn('SMTP настройки не заданы. Письмо не отправлено.');
                 this.logger.debug(`TO: ${to}, SUBJECT: ${subject}`);
                 return;
             }
 
             const info = await this.transporter.sendMail({
-                from: `"Образовательная платформа" <${process.env.SMTP_USER}>`,
+                from: `"Образовательная платформа" <${process.env.EMAIL_USER}>`,
                 to,
                 subject,
                 html

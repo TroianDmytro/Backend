@@ -1,7 +1,7 @@
-// В файле app.module.ts добавьте логирование:
+// app.module.ts
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { EmailModule } from './email/email.module';
@@ -14,22 +14,54 @@ import { LessonsModule } from './lessons/lessons.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { CategoriesModule } from './categories/categories.module';
 import { DifficultyLevelsModule } from './difficulty-levels/difficulty-levels.module';
+import configuration from './config/configuration';
 import { HomeworkModule } from './homework/homework.module';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
-    MongooseModule.forRoot(process.env.MONGODB_URI || 'mongodb://localhost:27017/auth-api', {
-      connectionFactory: (connection) => {
-        connection.on('connected', () => {
-          console.log('MongoDB успешно подключена');
-        });
-        connection.on('error', (error) => {
-          console.error('Ошибка подключения к MongoDB:', error);
-        });
-        return connection;
-      },
+    // Подключаем конфигурацию из файла configuration.ts
+    ConfigModule.forRoot({
+      load: [configuration], // Загружаем нашу конфигурацию
+      isGlobal: true,
     }),
+
+    // Подключение к MongoDB через ConfigService
+    MongooseModule.forRootAsync({
+      imports: [ConfigModule],
+      useFactory: async (configService: ConfigService) => {
+        const mongoUri = configService.get<string>('database.uri');
+
+        console.log('🔗 Подключение к MongoDB...');
+        console.log('📍 URI:', mongoUri ? 'Найден' : 'Не найден, используется fallback');
+
+        return {
+          uri: mongoUri,
+          // Дополнительные опции подключения
+          retryWrites: true,
+          w: 'majority',
+          connectionFactory: (connection) => {
+            connection.on('connected', () => {
+              console.log('✅ MongoDB успешно подключена');
+              console.log(`📦 База данных: ${connection.db?.databaseName || 'неизвестно'}`);
+            });
+
+            connection.on('error', (error) => {
+              console.error('❌ Ошибка подключения к MongoDB:', error.message);
+            });
+
+            connection.on('disconnected', () => {
+              console.log('⚠️ MongoDB отключена');
+            });
+
+            return connection;
+          },
+        };
+      },
+      inject: [ConfigService],
+    }),
+
     RolesModule, // Важно: сначала RolesModule
     UsersModule, // Затем UsersModule
     EmailModule,
@@ -43,30 +75,31 @@ import { HomeworkModule } from './homework/homework.module';
     HomeworkModule, // Модуль домашних заданий
     SubscriptionsModule // Модуль подписок
   ],
-  controllers: [AvatarsController],
+  controllers: [AppController,AvatarsController],
+  providers: [AppService],
 })
 export class AppModule { }
 
-
 /**
- * Объяснение структуры модулей:
+ * Объяснение работы с переменными окружения:
  * 
- * 1. **Базовые модули (в начале):**
- *    - ConfigModule - глобальная конфигурация
- *    - MongooseModule - подключение к MongoDB
- *    - RolesModule - система ролей (базовая функциональность)
- *    - UsersModule - пользователи
- *    - EmailModule - отправка уведомлений
- *    - AuthModule - аутентификация и авторизация
- *    - AvatarsModule - аватары пользователей
+ * 1. **Локальная разработка:**
+ *    - Переменные берутся из .env файла
+ *    - Fallback: 'mongodb://localhost:27017/auth-api'
  * 
- * 2. **Образовательные модули:**
- *    - TeachersModule - управление преподавателями
- *    - CoursesModule - управление курсами
- *    - LessonsModule - управление уроками
- *    - SubscriptionsModule - управление подписками
+ * 2. **Production (GitHub Secrets):**
+ *    - ConfigService автоматически получает MONGODB_URI из process.env
+ *    - process.env заполняется из GitHub Secrets при деплое
+ *    - Значение: mongodb+srv://troyant64:msfA0CqyZhkdF5NH@cluster0.icbj0hf.mongodb.net/
  * 
- * Порядок импорта важен для правильной инициализации зависимостей.
- * Например, TeachersModule должен быть загружен после RolesModule и UsersModule,
- * но до CoursesModule, так как курсы связаны с преподавателями.
+ * 3. **Как работает:**
+ *    - GitHub Actions устанавливает переменные в process.env
+ *    - ConfigService читает из process.env.MONGODB_URI
+ *    - configuration.ts возвращает правильное значение
+ *    - MongooseModule получает URI через ConfigService
+ * 
+ * 4. **Логирование:**
+ *    - Показывает найден ли URI (без раскрытия значения)
+ *    - Логирует успешное подключение
+ *    - Отслеживает ошибки подключения
  */
