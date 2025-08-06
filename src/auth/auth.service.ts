@@ -5,7 +5,19 @@ import { UsersService } from '../users/users.service';
 import { EmailService } from '../email/email.service';
 import { CreateUserDto, VerifyEmailCodeDto } from '../users/dto/create-user.dto';
 import { LoginUserDto } from '../users/dto/login-user.dto';
-import { use } from 'passport';
+import { ConfigService } from '@nestjs/config';
+
+
+// Интерфейс для данных пользователя из Google
+interface GoogleUserData {
+    googleId: string;
+    email: string;
+    name: string;
+    second_name: string;
+    avatar_url?: string;
+    accessToken: string;
+    refreshToken?: string;
+}
 
 const tagsList = [
     'Cool',
@@ -73,11 +85,137 @@ const tagsList = [
 
 @Injectable()
 export class AuthService {
+    private app_url;
+
     constructor(
         private usersService: UsersService,
         private jwtService: JwtService,
         private emailService: EmailService,
-    ) { }
+        private configService: ConfigService
+    ) {
+        this.app_url = this.configService.get<string>('app.url');
+    }
+
+ /**
+     * Валидация и создание/обновление пользователя Google
+     * @param googleUserData - данные пользователя от Google
+     */
+    async validateGoogleUser(googleUserData: GoogleUserData) {
+        const { googleId, email, name, second_name, avatar_url, accessToken, refreshToken } = googleUserData;
+        
+        try {
+            // 1. Ищем пользователя по Google ID
+            let user = await this.usersService.findByGoogleId(googleId);
+            
+            if (user) {
+                console.log('👤 Найден существующий Google пользователь:', user.email);
+                
+                // Обновляем токены Google
+                (user as any).updateGoogleTokens(accessToken, refreshToken);
+                await user.save();
+                
+                return user;
+            }
+
+            // 2. Ищем пользователя по email (возможно, уже зарегистрирован обычным способом)
+            user = await this.usersService.findOne(email) as any;
+            
+            if (user) {
+                console.log('🔗 Связываем существующий аккаунт с Google:', user.email);
+                
+                // Связываем существующий аккаунт с Google
+                user.googleId = googleId;
+                user.is_google_user = true;
+                user.isEmailVerified = true; // Google пользователи уже верифицированы
+                user.avatar_url = avatar_url;
+                (user as any).updateGoogleTokens(accessToken, refreshToken);
+                
+                // Если у пользователя не было имени/фамилии, добавляем из Google
+                if (!user.name && name) user.name = name;
+                if (!user.second_name && second_name) user.second_name = second_name;
+                
+                await user.save();
+                return user;
+            }
+
+            // 3. Создаем нового пользователя через Google
+            console.log('✨ Создаем нового Google пользователя:', email);
+            
+            const newUser = await this.usersService.createGoogleUser({
+                googleId,
+                email,
+                name,
+                second_name,
+                avatar_url,
+                accessToken,
+                refreshToken,
+            });
+
+            console.log('✅ Google пользователь создан:', newUser.email);
+            return newUser;
+
+        } catch (error) {
+            console.error('❌ Ошибка валидации Google пользователя:', error);
+            throw new UnauthorizedException('Ошибка авторизации через Google');
+        }
+    }
+
+    /**
+     * Генерация JWT токена для Google пользователя
+     * @param user - пользователь
+     */
+    async generateGoogleJWT(user: any) {
+        const roles = user.roles?.map(role =>
+            typeof role === 'object' ? role.name : role
+        ) || [];
+
+        const payload = {
+            email: user.email,
+            login: user.login || null, // У Google пользователей может не быть логина
+            sub: user._id,
+            roles: roles,
+            provider: 'google', // Помечаем, что авторизация через Google
+            googleId: user.googleId
+        };
+
+        return {
+            access_token: this.jwtService.sign(payload),
+            user: {
+                id: user.id,
+                email: user.email,
+                login: user.login,
+                name: user.name,
+                second_name: user.second_name,
+                isEmailVerified: user.isEmailVerified,
+                roles: roles,
+                provider: 'google',
+                avatar_url: user.avatar_url,
+                is_google_user: user.is_google_user
+            },
+        };
+    }
+
+    /**
+     * Отвязывание Google аккаунта от пользователя
+     * @param userId - ID пользователя
+     */
+    async unlinkGoogleAccount(userId: string) {
+        return this.usersService.unlinkGoogleAccount(userId);
+    }
+
+    /**
+     * Получение статуса Google авторизации пользователя
+     * @param userId - ID пользователя
+     */
+    async getUserGoogleStatus(userId: string) {
+        const user = await this.usersService.findById(userId);
+        if (!user) {
+            throw new NotFoundException('Пользователь не найден');
+        }
+        return user;
+    }
+    
+
     // Генерация случайного пароля
     private generateSecurePassword(): string {
         const lowercase = 'abcdefghijklmnopqrstuvwxyz';
@@ -87,35 +225,30 @@ export class AuthService {
 
         let password = '';
 
-        // Гарантируем наличие каждого типа символов
-        password += uppercase[Math.floor(Math.random() * uppercase.length)]; // 1 заглавная
-        password += digits[Math.floor(Math.random() * digits.length)]; // 1 цифра
-        password += specialChars[Math.floor(Math.random() * specialChars.length)]; // 1 спец символ
+        password += uppercase[Math.floor(Math.random() * uppercase.length)];
+        password += digits[Math.floor(Math.random() * digits.length)];
+        password += specialChars[Math.floor(Math.random() * specialChars.length)];
 
-        // Добавляем остальные 5 символов случайно
         const allChars = lowercase + uppercase + digits;
         for (let i = 3; i < 8; i++) {
             password += allChars[Math.floor(Math.random() * allChars.length)];
         }
 
-        // Перемешиваем символы для случайного порядка
         return password.split('').sort(() => Math.random() - 0.5).join('');
     }
 
     // Генерация уникального логина на основе email
     private generateLogin(email: string): string {
         const base = email.split('@')[0]
-            .replace(/[^a-zA-Z0-9]/g, '') // убираем лишние символы
-            .slice(0, 10); // ограничим длину
+            .replace(/[^a-zA-Z0-9]/g, '')
+            .slice(0, 10);
 
-        const tags = tagsList;
+        const tags = ['Cool', 'Fast', 'Smart', 'Pro']; // Сокращенный список
         const tag = tags[Math.floor(Math.random() * tags.length)];
-
         const number = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
 
         return `${base}${tag}${number}`;
     }
-
 
     // Отправка кода подтверждения на email
     async sendVerificationCode(createUserDto: CreateUserDto) {
@@ -193,6 +326,10 @@ export class AuthService {
             throw new UnauthorizedException('Неверный логин или пароль');
         }
 
+        if(!user.password){
+            throw new UnauthorizedException('Error: user.password is undefined');
+        }
+
         // Проверка на блокировку
         if (user.isBlocked) {
             throw new UnauthorizedException('Ваш аккаунт заблокирован. Обратитесь к администратору.');
@@ -253,7 +390,7 @@ export class AuthService {
         try {
             await this.emailService.sendVerificationEmail(
                 user.email,
-                `${process.env.APP_URL}/auth/verify-email?token=${user.verificationToken}`,
+                `${this.app_url}/auth/verify-email?token=${user.verificationToken}`,
                 user.name
             );
         } catch (error) {
@@ -335,6 +472,10 @@ export class AuthService {
             throw new NotFoundException('Пользователь не найден');
         }
 
+        if (!user.password) {
+            throw new UnauthorizedException('Error: user.password is undefined');
+        }
+        
         // Проверяем текущий пароль
         const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
 

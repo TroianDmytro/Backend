@@ -1,4 +1,4 @@
-// src/users/dto/login-user.dto.ts
+// src/users/dto/login-user.dto.ts 
 import { IsNotEmpty, IsString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -9,7 +9,7 @@ export class LoginUserDto {
     })
     @IsString({ message: 'Логин должен быть строкой' })
     @IsNotEmpty({ message: 'Логин обязателен' })
-    login: string;
+    login!: string; 
 
     @ApiProperty({
         example: 'Abc123!@',
@@ -17,5 +17,5 @@ export class LoginUserDto {
     })
     @IsString({ message: 'Пароль должен быть строкой' })
     @IsNotEmpty({ message: 'Пароль обязателен' })
-    password: string;
+    password!: string; 
 }

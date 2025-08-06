@@ -6,13 +6,261 @@ import { AuthService } from './auth.service';
 import { CreateUserDto, VerifyEmailCodeDto } from '../users/dto/create-user.dto';
 import { LoginUserDto } from '../users/dto/login-user.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { GoogleAuthGuard } from './guards/google-auth.guard';
+import { ConfigService } from '@nestjs/config';
 
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
     private readonly logger = new Logger(AuthController.name);
 
-    constructor(private authService: AuthService) { }
+    constructor(private authService: AuthService, private configService: ConfigService) { }
+
+    // === НОВЫЕ ЭНДПОИНТЫ ДЛЯ GOOGLE OAUTH ===
+
+    /**
+     * GET /auth/google - Начало авторизации через Google
+     * Перенаправляет пользователя на страницу авторизации Google
+     */
+    @Get('google')
+    @UseGuards(GoogleAuthGuard)
+    @ApiOperation({
+        summary: 'Авторизация через Google - начало процесса',
+        description: 'Перенаправляет пользователя на страницу авторизации Google. После успешной авторизации Google перенаправит на /auth/google/callback'
+    })
+    @ApiResponse({
+        status: 302,
+        description: 'Перенаправление на Google OAuth'
+    })
+    async googleAuth(@Request() req) {
+        // Этот метод автоматически перенаправит на Google
+        // Реальная логика происходит в GoogleAuthGuard и GoogleStrategy
+    }
+
+    /**
+     * GET /auth/google/callback - Callback после авторизации в Google
+     * Google перенаправляет сюда после успешной авторизации
+     */
+    @Get('google/callback')
+    @UseGuards(GoogleAuthGuard)
+    @ApiOperation({
+        summary: 'Callback Google OAuth',
+        description: 'Обрабатывает ответ от Google после авторизации и создает/авторизует пользователя'
+    })
+    @ApiResponse({
+        status: 302,
+        description: 'Перенаправление на фронтенд с токеном'
+    })
+    @ApiResponse({
+        status: 400,
+        description: 'Ошибка авторизации Google'
+    })
+    async googleAuthRedirect(@Request() req, @Res() res: Response) {
+        try {
+            this.logger.log('🔄 Обработка Google OAuth callback');
+
+            if (!req.user) {
+                this.logger.error('❌ Пользователь не найден в req.user');
+                return this.redirectToFrontendWithError(res, 'google_auth_failed');
+            }
+
+            // Генерируем JWT токен для пользователя
+            const tokenData = await this.authService.generateGoogleJWT(req.user);
+
+            this.logger.log(`✅ Google OAuth успешно: ${req.user.email}`);
+
+            // Получаем URL фронтенда из конфигурации
+            const frontendUrl = this.configService.get<string>('app.frontendUrl');
+
+            // Перенаправляем на фронтенд с токеном в URL
+            const redirectUrl = `${frontendUrl}/auth/google/success?token=${tokenData.access_token}&user=${encodeURIComponent(JSON.stringify(tokenData.user))}`;
+
+            return res.redirect(redirectUrl);
+
+        } catch (error) {
+            this.logger.error(`❌ Ошибка Google OAuth callback: ${error.message}`, error.stack);
+            return this.redirectToFrontendWithError(res, 'google_auth_error');
+        }
+    }
+
+    /**
+     * POST /auth/google/link - Связывание Google аккаунта с существующим
+     * Позволяет авторизованному пользователю связать свой аккаунт с Google
+     */
+    @Post('google/link')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({
+        summary: 'Связывание Google аккаунта',
+        description: 'Связывает Google аккаунт с текущим авторизованным пользователем'
+    })
+    @ApiResponse({
+        status: 200,
+        description: 'Google аккаунт успешно связан'
+    })
+    @ApiResponse({
+        status: 409,
+        description: 'Google аккаунт уже связан с другим пользователем'
+    })
+    async linkGoogleAccount(@Request() req) {
+        const userId = req.user?.userId;
+
+        this.logger.log(`Запрос на связывание Google аккаунта для пользователя: ${userId}`);
+
+        // Здесь нужна дополнительная логика для получения данных от Google
+        // Можно реализовать через отдельный эндпоинт или frontend процесс
+
+        return {
+            message: 'Для связывания Google аккаунта перейдите по ссылке',
+            linkUrl: `/auth/google?link=${userId}`
+        };
+    }
+
+    /**
+     * POST /auth/google/unlink - Отвязывание Google аккаунта
+     * Отвязывает Google аккаунт от текущего пользователя
+     */
+    @Post('google/unlink')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({
+        summary: 'Отвязывание Google аккаунта',
+        description: 'Отвязывает Google аккаунт от текущего пользователя'
+    })
+    @ApiResponse({
+        status: 200,
+        description: 'Google аккаунт успешно отвязан'
+    })
+    @ApiResponse({
+        status: 400,
+        description: 'Нельзя отвязать Google аккаунт без пароля'
+    })
+    async unlinkGoogleAccount(@Request() req) {
+        const userId = req.user?.userId;
+
+        this.logger.log(`Отвязывание Google аккаунта для пользователя: ${userId}`);
+
+        await this.authService.unlinkGoogleAccount(userId);
+
+        return {
+            success: true,
+            message: 'Google аккаунт успешно отвязан'
+        };
+    }
+
+    /**
+     * GET /auth/google/status - Проверка статуса Google авторизации
+     * Показывает, связан ли Google аккаунт с текущим пользователем
+     */
+    @Get('google/status')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({
+        summary: 'Статус Google авторизации',
+        description: 'Возвращает информацию о связанном Google аккаунте'
+    })
+    @ApiResponse({
+        status: 200,
+        description: 'Статус Google авторизации'
+    })
+    async getGoogleStatus(@Request() req) {
+        const userId = req.user?.userId;
+        const user = await this.authService.getUserGoogleStatus(userId);
+
+        return {
+            isLinked: user.is_google_user,
+            googleId: user.is_google_user ? user.googleId : null,
+            lastGoogleLogin: user.last_google_login,
+            hasValidToken: user.isGoogleTokenValid?.() || false
+        };
+    }
+
+    // === ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ===
+
+    /**
+     * Перенаправление на фронтенд с ошибкой
+     */
+    private redirectToFrontendWithError(res: Response, error: string) {
+        const frontendUrl = this.configService.get<string>('app.frontendUrl');
+        const redirectUrl = `${frontendUrl}/auth/google/error?error=${error}`;
+        return res.redirect(redirectUrl);
+    }
+
+    /**
+     * HTML страница для успешной авторизации Google (запасной вариант)
+     */
+    private getGoogleSuccessPage(token: string, user: any): string {
+        return `
+        <!DOCTYPE html>
+        <html lang="ru">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Авторизация Google - Успешно</title>
+            <style>
+                body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+                .success { color: #28a745; font-size: 24px; margin-bottom: 20px; }
+                .token { background: #f8f9fa; padding: 10px; border-radius: 5px; word-break: break-all; }
+                .button { background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 20px; }
+            </style>
+            <script>
+                // Автоматически закрываем окно и передаем данные родительскому окну
+                if (window.opener) {
+                    window.opener.postMessage({
+                        type: 'GOOGLE_AUTH_SUCCESS',
+                        token: '${token}',
+                        user: ${JSON.stringify(user)}
+                    }, '*');
+                    window.close();
+                } else {
+                    // Если нет родительского окна, сохраняем токен в localStorage
+                    localStorage.setItem('auth_token', '${token}');
+                    localStorage.setItem('user_data', '${JSON.stringify(user)}');
+                }
+            </script>
+        </head>
+        <body>
+            <div class="success">✅ Авторизация через Google успешна!</div>
+            <p>Добро пожаловать, ${user.name}!</p>
+            <div class="token">
+                <strong>Токен:</strong><br>
+                ${token}
+            </div>
+            <a href="${this.configService.get<string>('app.frontendUrl')}" class="button">
+                Перейти к приложению
+            </a>
+        </body>
+        </html>
+        `;
+    }
+
+    /**
+     * HTML страница для ошибки авторизации Google
+     */
+    private getGoogleErrorPage(error: string): string {
+        return `
+        <!DOCTYPE html>
+        <html lang="ru">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Ошибка авторизации Google</title>
+            <style>
+                body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+                .error { color: #dc3545; font-size: 24px; margin-bottom: 20px; }
+                .button { background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 20px; }
+            </style>
+        </head>
+        <body>
+            <div class="error">❌ Ошибка авторизации через Google</div>
+            <p>Код ошибки: ${error}</p>
+            <a href="${this.configService.get<string>('app.frontendUrl')}" class="button">
+                Вернуться к приложению
+            </a>
+        </body>
+        </html>
+        `;
+    }
 
     @Post('register/send-code')
     @ApiOperation({

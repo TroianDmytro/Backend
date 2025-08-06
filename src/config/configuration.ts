@@ -9,6 +9,12 @@ export default () => ({
         secret: process.env.JWT_SECRET || 'cd2c18d6c7f64a37a1a404c4d4c5a75ee76ec2b13949e3a67e1e0e1a3cf6a8db',
         expiresIn: process.env.JWT_EXPIRES_IN || '1d',
     },
+    // конфигурацию для Google OAuth
+    google: {
+        clientId: process.env.GOOGLE_CLIENT_ID || '1234567890-abcdefghijklmnopqrstuvwxyz.apps.googleusercontent.com',
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET || '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4v5',
+        callbackUrl: process.env.GOOGLE_CALLBACK_URL || 'https://neuronest.pp.ua/api/auth/google/callback',
+    },
     email: {
         host: process.env.EMAIL_HOST || 'smtp.gmail.com',
         port: parseInt(process.env.EMAIL_PORT || '587', 10),
@@ -30,6 +36,8 @@ export default () => ({
         allowedOrigins: ['*'],
         // Базовый префикс для API
         globalPrefix: process.env.API_PREFIX || 'api',
+        // URL для редиректа после успешной авторизации
+        frontendUrl: process.env.FRONTEND_URL || 'https://neuronest.pp.ua',
     },
     swagger: {
         enabled: process.env.SWAGGER_ENABLED !== 'true',

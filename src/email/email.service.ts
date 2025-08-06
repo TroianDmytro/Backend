@@ -8,40 +8,45 @@ export class EmailService {
 
     private readonly logger = new Logger(EmailService.name);
     private transporter: nodemailer.Transporter;
-
+    private emailHost;
+    private emailPort;
+    private emailSecureBoolean;
+    private emailUser;
+    private emailPassword;
+    private app_url;
     constructor(private configService: ConfigService) {
         this.createTransporter();
+        this.app_url = this.configService.get<string>('app.url');
     }
 
     private createTransporter() {
         try {
-            
-            // Проверяем наличие всех переменных окружения
-            const emailHost = this.configService.get<string>('email.host');
-            const emailPort = this.configService.get<string>('email.port');
-            const emailUser = this.configService.get<string>('email.user');
-            const emailPassword = this.configService.get<string>('email.password');
-            const emailSecureBoolean = this.configService.get<string>('email.secure') === 'true';
+
+            this.emailHost = this.configService.get<string>('email.host');
+            this.emailPort = this.configService.get<string>('email.port');
+            this.emailUser = this.configService.get<string>('email.user');
+            this.emailPassword = this.configService.get<string>('email.password');
+            this.emailSecureBoolean = this.configService.get<string>('email.secure') === 'true';
 
             // Детальное логирование для диагностики
-            this.logger.log(`🔧 Настройка SMTP: ${emailHost}:${emailPort}`);
-            this.logger.log(`📧 Email пользователь: ${emailUser ? 'ОК' : 'НЕТ'}`);
-            this.logger.log(`🔑 Email пароль: ${emailPassword ? 'ОК' : 'НЕТ'}`);
-            this.logger.log(`🔒 Secure: ${emailSecureBoolean}`);
+            this.logger.log(`🔧 Настройка SMTP: ${this.emailHost}:${this.emailPort}`);
+            this.logger.log(`📧 Email пользователь: ${this.emailUser ? 'ОК' : 'НЕТ'}`);
+            this.logger.log(`🔑 Email пароль: ${this.emailPassword ? 'ОК' : 'НЕТ'}`);
+            this.logger.log(`🔒 Secure: ${this.emailSecureBoolean}`);
 
-            if (!emailHost || !emailPort || !emailUser || !emailPassword) {
+            if (!this.emailHost || !this.emailPort || !this.emailUser || !this.emailPassword) {
                 this.logger.warn('⚠️  Не все email переменные окружения настроены');
-                this.logger.warn(`HOST: ${emailHost ? '✅' : '❌'}, PORT: ${emailPort ? '✅' : '❌'}, USER: ${emailUser ? '✅' : '❌'}, PASS: ${emailPassword ? '✅' : '❌'}`);
+                this.logger.warn(`HOST: ${this.emailHost ? '✅' : '❌'}, PORT: ${this.emailPort ? '✅' : '❌'}, USER: ${this.emailUser ? '✅' : '❌'}, PASS: ${this.emailPassword ? '✅' : '❌'}`);
                 return;
             }
 
             this.transporter = nodemailer.createTransport({
-                host: emailHost,
-                port: parseInt(emailPort),
-                secure: emailSecureBoolean, // true для 465, false для других портов
+                host: this.emailHost,
+                port: parseInt(this.emailPort),
+                secure: this.emailSecureBoolean, // true для 465, false для других портов
                 auth: {
-                    user: emailUser,
-                    pass: emailPassword,
+                    user: this.emailUser,
+                    pass: this.emailPassword,
                 },
                 tls: {
                     rejectUnauthorized: false, // Для Gmail
@@ -130,7 +135,7 @@ export class EmailService {
             </div>
 
             <div style="text-align: center; margin: 30px 0;">
-                <a href="${process.env.APP_URL || 'http://localhost:3000'}/login" 
+                <a href="${this.app_url || 'http://localhost:3000'}/login" 
                    style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">
                     Войти в систему
                 </a>
@@ -358,27 +363,147 @@ export class EmailService {
     }
 
     /**
-     * Базовый метод отправки email
-     */
+ * Приветственное письмо для пользователей, зарегистрированных через Google
+ */
+    async sendWelcomeEmailForGoogleUser(email: string, name?: string): Promise<void> {
+        const subject = 'Добро пожаловать! Регистрация через Google';
+        const html = `
+        <h2>Добро пожаловать на образовательную платформу!</h2>
+        <p>Здравствуйте${name ? `, ${name}` : ''}!</p>
+        
+        <div style="background-color: #e8f5e8; padding: 20px; border-radius: 8px; border-left: 4px solid #28a745; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #28a745;">🎉 Регистрация завершена успешно!</h3>
+            <p>Вы успешно зарегистрировались на нашей платформе используя свой Google аккаунт.</p>
+        </div>
+
+        <div style="background-color: #d4edda; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <h4 style="margin-top: 0; color: #155724;">✅ Преимущества авторизации через Google:</h4>
+            <ul style="color: #155724; margin: 10px 0 0 20px;">
+                <li>Быстрый и безопасный вход без запоминания паролей</li>
+                <li>Автоматическая синхронизация профиля</li>
+                <li>Ваш email уже подтвержден</li>
+                <li>Безопасность на уровне Google</li>
+            </ul>
+        </div>
+
+        <div style="background-color: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 20px 0;">
+            <h4 style="margin-top: 0; color: #856404;">📚 Что дальше?</h4>
+            <ul style="color: #856404; margin: 10px 0 0 20px;">
+                <li>Изучите доступные курсы</li>
+                <li>Заполните свой профиль</li>
+                <li>Начните обучение</li>
+                <li>При необходимости можете установить дополнительный пароль в настройках</li>
+            </ul>
+        </div>
+
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="${this.app_url || 'https://neuronest.pp.ua'}" 
+               style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                Перейти к обучению
+            </a>
+        </div>
+
+        <p style="margin-top: 30px;">
+            <strong>Важно:</strong> Для входа в систему в дальнейшем используйте кнопку "Войти через Google" 
+            или можете установить обычный пароль в настройках профиля.
+        </p>
+        
+        <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+        <p style="color: #666; font-size: 12px;">
+            Это автоматическое письмо, не отвечайте на него.<br>
+            Если у вас возникли вопросы, обратитесь в службу поддержки.
+        </p>
+    `;
+
+        await this.sendEmail(email, subject, html);
+    }
+
+    // Базовый метод отправки email (если не существует)
     private async sendEmail(to: string, subject: string, html: string): Promise<void> {
         try {
-            if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
-                this.logger.warn('SMTP настройки не заданы. Письмо не отправлено.');
-                this.logger.debug(`TO: ${to}, SUBJECT: ${subject}`);
+            if (!this.transporter) {
+                console.warn('SMTP транспорт не настроен. Письмо не отправлено.');
+                console.debug(`TO: ${to}, SUBJECT: ${subject}`);
                 return;
             }
 
             const info = await this.transporter.sendMail({
-                from: `"Образовательная платформа" <${process.env.EMAIL_USER}>`,
+                from: `"Образовательная платформа" <${this.emailUser}>`,
                 to,
                 subject,
                 html
             });
 
-            this.logger.log(`Email отправлен: ${info.messageId} -> ${to}`);
+            console.log(`Email отправлен: ${info.messageId} -> ${to}`);
         } catch (error) {
-            this.logger.error(`Ошибка отправки email: ${error.message}`, error.stack);
+            console.error(`Ошибка отправки email: ${error.message}`, error.stack);
             throw error;
         }
     }
+
+    /**
+     * Уведомление о связывании Google аккаунта с существующим профилем
+     */
+    async sendGoogleAccountLinkedNotification(email: string, name?: string): Promise<void> {
+        const subject = 'Google аккаунт успешно привязан';
+        const html = `
+        <h2>Google аккаунт привязан к вашему профилю</h2>
+        <p>Здравствуйте${name ? `, ${name}` : ''}!</p>
+        
+        <div style="background-color: #d4edda; padding: 20px; border-radius: 8px; border-left: 4px solid #28a745; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #28a745;">🔗 Связывание выполнено успешно!</h3>
+            <p>Ваш Google аккаунт теперь привязан к профилю на нашей платформе.</p>
+        </div>
+
+        <p><strong>Теперь вы можете:</strong></p>
+        <ul>
+            <li>Входить в систему через Google одним кликом</li>
+            <li>Использовать как Google авторизацию, так и обычный пароль</li>
+            <li>Синхронизировать данные профиля с Google</li>
+        </ul>
+
+        <p><strong>Безопасность:</strong> Если это были не вы, немедленно обратитесь в службу поддержки 
+        и измените пароль вашего аккаунта.</p>
+        
+        <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+        <p style="color: #666; font-size: 12px;">
+            Это автоматическое письмо, не отвечайте на него.
+        </p>
+    `;
+
+        await this.sendEmail(email, subject, html);
+    }
+
+    /**
+     * Уведомление об отвязке Google аккаунта
+     */
+    async sendGoogleAccountUnlinkedNotification(email: string, name?: string): Promise<void> {
+        const subject = 'Google аккаунт отвязан от профиля';
+        const html = `
+        <h2>Google аккаунт отвязан</h2>
+        <p>Здравствуйте${name ? `, ${name}` : ''}!</p>
+        
+        <div style="background-color: #fff3cd; padding: 20px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #856404;">🔓 Google аккаунт отвязан</h3>
+            <p>Ваш Google аккаунт больше не привязан к профилю на нашей платформе.</p>
+        </div>
+
+        <p><strong>Что изменилось:</strong></p>
+        <ul>
+            <li>Вход через Google больше недоступен</li>
+            <li>Для входа используйте email и пароль</li>
+            <li>Все ваши курсы и прогресс сохранены</li>
+        </ul>
+
+        <p><strong>Безопасность:</strong> Если это были не вы, немедленно обратитесь в службу поддержки.</p>
+        
+        <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+        <p style="color: #666; font-size: 12px;">
+            Это автоматическое письмо, не отвечайте на него.
+        </p>
+    `;
+
+        await this.sendEmail(email, subject, html);
+    }
+
 }

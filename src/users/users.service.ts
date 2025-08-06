@@ -11,6 +11,17 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { EmailService } from 'src/email/email.service';
 import { CreateWithCredentialsDto } from './interfaces/create-credentials.interface';
 
+// Интерфейс для создания Google пользователя
+interface CreateGoogleUserDto {
+    googleId: string;
+    email: string;
+    name: string;
+    second_name: string;
+    avatar_url?: string;
+    accessToken: string;
+    refreshToken?: string;
+}
+
 @Injectable()
 export class UsersService {
     private readonly logger = new Logger(UsersService.name);
@@ -21,6 +32,178 @@ export class UsersService {
         private readonly emailService: EmailService
     ) { }
 
+
+    /**
+     * Поиск пользователя по Google ID
+     * @param googleId - ID пользователя в Google
+     */
+    async findByGoogleId(googleId: string): Promise<UserDocument | null> {
+        return this.userModel
+            .findOne({ googleId })
+            .populate('roles')
+            .exec();
+    }
+
+    /**
+     * Создание нового пользователя через Google OAuth
+     * @param googleUserData - данные пользователя от Google
+     */
+    async createGoogleUser(googleUserData: CreateGoogleUserDto): Promise<UserDocument> {
+        const { googleId, email, name, second_name, avatar_url, accessToken, refreshToken } = googleUserData;
+
+        // Проверяем, что пользователь с таким email не существует
+        const existingUser = await this.userModel.findOne({ email }).exec();
+        if (existingUser) {
+            throw new ConflictException('Пользователь с таким email уже существует');
+        }
+
+        // Получаем базовую роль
+        const userRole = await this.rolesService.getUserRole();
+
+        // Генерируем уникальный логин для Google пользователя
+        let login: string;
+        let attempts = 0;
+        const maxAttempts = 10;
+
+        do {
+            const baseLogin = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '').slice(0, 8);
+            const suffix = attempts === 0 ? 'google' : `google${attempts}`;
+            const number = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+            login = `${baseLogin}${suffix}${number}`;
+
+            const existingLogin = await this.userModel.findOne({ login }).exec();
+            if (!existingLogin) break;
+
+            attempts++;
+        } while (attempts < maxAttempts);
+
+        if (attempts >= maxAttempts) {
+            // Если не удалось сгенерировать уникальный логин, используем Google ID
+            login = `google_${googleId}`;
+        }
+
+        // Создаем нового Google пользователя
+        const newUser = new this.userModel({
+            email,
+            login,
+            name,
+            second_name,
+            googleId,
+            avatar_url,
+            is_google_user: true,
+            isEmailVerified: true, // Google пользователи уже верифицированы
+            isBlocked: false,
+            roles: [userRole._id],
+            // Не устанавливаем пароль для Google пользователей
+            password: undefined,
+        });
+
+        // Устанавливаем Google токены
+        newUser.updateGoogleTokens(accessToken, refreshToken);
+
+        const savedUser = await newUser.save();
+
+        // Отправляем приветственное письмо
+        try {
+            await this.emailService.sendWelcomeEmailForGoogleUser(email, name);
+        } catch (error) {
+            this.logger.error(`Ошибка отправки приветственного письма: ${error.message}`);
+        }
+
+        // Возвращаем пользователя с заполненными ролями
+        const result = await this.userModel
+            .findById(savedUser._id)
+            .populate('roles')
+            .exec();
+
+        if (!result) {
+            throw new NotFoundException('Ошибка при создании пользователя');
+        }
+
+        this.logger.log(`Создан новый Google пользователь: ${email}`);
+        return result;
+    }
+
+    /**
+     * Связывание существующего аккаунта с Google
+     * @param userId - ID существующего пользователя
+     * @param googleData - данные от Google
+     */
+    async linkGoogleAccount(userId: string, googleData: CreateGoogleUserDto): Promise<UserDocument> {
+        const user = await this.userModel.findById(userId).exec();
+        if (!user) {
+            throw new NotFoundException('Пользователь не найден');
+        }
+
+        // Проверяем, что Google аккаунт не связан с другим пользователем
+        const existingGoogleUser = await this.findByGoogleId(googleData.googleId);
+        if (existingGoogleUser && (existingGoogleUser._id as any).toString() !== userId) {
+            throw new ConflictException('Этот Google аккаунт уже связан с другим пользователем');
+        }
+
+        // Связываем аккаунты
+        user.googleId = googleData.googleId;
+        user.is_google_user = true;
+        user.isEmailVerified = true;
+        user.avatar_url = googleData.avatar_url;
+        user.updateGoogleTokens(googleData.accessToken, googleData.refreshToken);
+
+        // Обновляем имя/фамилию если они пустые
+        if (!user.name && googleData.name) user.name = googleData.name;
+        if (!user.second_name && googleData.second_name) user.second_name = googleData.second_name;
+
+        await user.save();
+
+        this.logger.log(`Связан Google аккаунт с пользователем: ${user.email}`);
+        return user;
+    }
+
+    /**
+     * Отвязывание Google аккаунта от пользователя
+     * @param userId - ID пользователя
+     */
+    async unlinkGoogleAccount(userId: string): Promise<UserDocument> {
+        const user = await this.userModel.findById(userId).exec();
+        if (!user) {
+            throw new NotFoundException('Пользователь не найден');
+        }
+
+        if (!user.is_google_user) {
+            throw new ConflictException('У пользователя нет связанного Google аккаунта');
+        }
+
+        // Проверяем, есть ли у пользователя пароль
+        if (!user.password) {
+            throw new ConflictException(
+                'Нельзя отвязать Google аккаунт без установки пароля. Сначала установите пароль.'
+            );
+        }
+
+        // Отвязываем Google аккаунт
+        user.googleId = undefined;
+        user.is_google_user = false;
+        user.avatar_url = undefined;
+        user.google_access_token = undefined;
+        user.google_refresh_token = undefined;
+        user.google_token_expires_at = undefined;
+        user.last_google_login = undefined;
+
+        await user.save();
+
+        this.logger.log(`Отвязан Google аккаунт от пользователя: ${user.email}`);
+        return user;
+    }
+
+    /**
+     * Получение всех Google пользователей
+     */
+    async findGoogleUsers(): Promise<UserDocument[]> {
+        return this.userModel
+            .find({ is_google_user: true })
+            .populate('roles')
+            .select('-password -google_access_token -google_refresh_token')
+            .exec();
+    }
 
     //Поиск пользователя по email
     async findOne(email: string): Promise<User | null> {

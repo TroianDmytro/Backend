@@ -1,17 +1,15 @@
-// src/users/schemas/user.schema.ts
+// src/users/schemas/user.schema.ts - ДОПОЛНЕНИЯ для Google OAuth
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Schema as MongooseSchema, Types } from 'mongoose';
 import { Role } from '../../roles/schemas/role.schema';
 import { Course } from 'src/courses/schemas/course.schema';
 
-export type UserDocument = User & Document;
-
 @Schema({
-    timestamps: true, // Добавляем автоматические поля createdAt и updatedAt
+    timestamps: true,
     toJSON: {
-        virtuals: true, // Добавляем виртуальные поля в JSON представление
+        virtuals: true,
         transform: (doc, ret) => {
-            ret.id = ret._id.toString(); // Преобразуем _id в id
+            ret.id = ret._id.toString();
             delete ret._id;
             delete ret.__v;
             return ret;
@@ -19,10 +17,8 @@ export type UserDocument = User & Document;
     }
 })
 export class User {
-    // Виртуальное поле ID (преобразуется из _id MongoDB)
     id?: string;
 
-    // Ссылка на аватар в отдельной коллекции
     @Prop({
         type: MongooseSchema.Types.ObjectId,
         ref: 'Avatar',
@@ -32,67 +28,90 @@ export class User {
 
     // Основная информация пользователя
     @Prop({ required: true, unique: true })
-    email: string; // Email адрес пользователя (уникальный, обязательный)
+    email: string;
 
-    @Prop({ required: true, unique: true })
-    login: string; // Уникальный логин пользователя (генерируется автоматически)
+    @Prop({ required: false, unique: true, sparse: true }) // sparse для null значений
+    login?: string; // Делаем необязательным для Google пользователей
 
-    @Prop({ required: true })
-    password: string; // Хешированный пароль пользователя (обязательный)
-
-    @Prop()
-    name?: string; // Имя пользователя (необязательное)
+    @Prop({ required: false }) // Необязательно для Google пользователей
+    password?: string;
 
     @Prop()
-    second_name?: string; // Фамилия пользователя (необязательное)
+    name?: string;
 
     @Prop()
-    age?: number; // Возраст пользователя (необязательное)
+    second_name?: string;
 
     @Prop()
-    telefon_number?: string; // Номер телефона пользователя (необязательное)
+    age?: number;
 
-    // Статусы и состояние аккаунта
+    @Prop()
+    telefon_number?: string;
+
+    // === НОВЫЕ ПОЛЯ ДЛЯ GOOGLE OAUTH ===
+
+    @Prop({ type: String, unique: true, sparse: true })
+    googleId?: string; // ID пользователя в Google
+
+    @Prop({ type: String })
+    avatar_url?: string; // URL аватара от Google
+
+    @Prop({ type: String })
+    google_access_token?: string; // Токен доступа Google (можно шифровать)
+
+    @Prop({ type: String })
+    google_refresh_token?: string; // Токен обновления Google (можно шифровать)
+
+    @Prop({ type: Date })
+    google_token_expires_at?: Date; // Срок действия Google токена
+
+    @Prop({ type: Boolean, default: false })
+    is_google_user: boolean; // Флаг, что пользователь зарегистрирован через Google
+
+    @Prop({ type: Date })
+    last_google_login?: Date; // Последний вход через Google
+
+    // === ОСТАЛЬНЫЕ ПОЛЯ ОСТАЮТСЯ БЕЗ ИЗМЕНЕНИЙ ===
+
     @Prop({ default: false })
-    isEmailVerified: boolean; // Статус подтверждения email (по умолчанию false)
+    isEmailVerified: boolean;
 
     @Prop({ default: false })
-    isBlocked: boolean; // Статус блокировки пользователя (по умолчанию false)
+    isBlocked: boolean;
 
-    // Токены для верификации email (теперь используем коды вместо токенов)
+    // Коды верификации
     @Prop({ type: String, default: null })
-    verificationCode: string | null; // 6-значный код для подтверждения email
+    verificationCode: string | null;
 
     @Prop({ type: Date, default: null })
-    verificationCodeExpires: Date | null; // Срок действия кода верификации
+    verificationCodeExpires: Date | null;
 
-    // Старые поля токенов (для обратной совместимости)
+    // Старые токены (для обратной совместимости)
     @Prop({ type: String, default: null })
-    verificationToken: string | null; // Токен для подтверждения email (устаревший)
+    verificationToken: string | null;
 
     @Prop({ type: Date, default: null })
-    verificationTokenExpires: Date | null; // Срок действия токена верификации (устаревший)
+    verificationTokenExpires: Date | null;
 
     // Токены для сброса пароля
     @Prop({ type: String, default: null })
-    resetPasswordToken: string | null; // Код для сброса пароля (6-значный)
+    resetPasswordToken: string | null;
 
     @Prop({ type: Date, default: null })
-    resetPasswordExpires: Date | null; // Срок действия кода сброса пароля
+    resetPasswordExpires: Date | null;
 
-    // Роли пользователя (связь с коллекцией ролей)
+    // Роли пользователя
     @Prop({ type: [{ type: MongooseSchema.Types.ObjectId, ref: 'Role' }] })
-    roles: Role[]; // Массив ролей пользователя (ссылки на документы Role)
+    roles: Role[];
 
     @Prop({
         type: [{ type: Types.ObjectId, ref: 'Course' }],
         default: []
     })
-    assignedCourses: Types.ObjectId[] | Course[]; // Список курсов
+    assignedCourses: Types.ObjectId[] | Course[];
 
-    // Системные поля (автоматически управляются Mongoose при timestamps: true)
-    createdAt?: Date; // Дата и время создания записи
-    updatedAt?: Date; // Дата и время последнего обновления записи
+    createdAt?: Date;
+    updatedAt?: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
@@ -102,9 +121,42 @@ UserSchema.virtual('id').get(function () {
     return this._id.toString();
 });
 
+// Виртуальное поле для определения типа авторизации
+UserSchema.virtual('auth_provider').get(function () {
+    if (this.is_google_user) return 'google';
+    return 'local';
+});
+
 // Индексы для оптимизации
 UserSchema.index({ avatarId: 1 });
 UserSchema.index({ roles: 1 });
 UserSchema.index({ isBlocked: 1 });
 UserSchema.index({ isEmailVerified: 1 });
-UserSchema.index({ verificationCode: 1 }); // Индекс для поиска по коду верификации
+UserSchema.index({ verificationCode: 1 });
+UserSchema.index({ googleId: 1 }); // Индекс для Google ID
+UserSchema.index({ is_google_user: 1 }); // Индекс для типа пользователя
+
+// Добавляем методы в интерфейс UserDocument
+export interface UserMethods {
+    updateGoogleTokens(accessToken: string, refreshToken?: string): void;
+    isGoogleTokenValid(): boolean;
+}
+
+// Обновляем тип UserDocument
+export type UserDocument = User & Document & UserMethods;
+
+/**
+ * Методы для работы с Google токенами
+ */
+UserSchema.methods.updateGoogleTokens = function (accessToken: string, refreshToken?: string) {
+    this.google_access_token = accessToken;
+    if (refreshToken) {
+        this.google_refresh_token = refreshToken;
+    }
+    this.google_token_expires_at = new Date(Date.now() + 3600 * 1000); // 1 час
+    this.last_google_login = new Date();
+};
+
+UserSchema.methods.isGoogleTokenValid = function () {
+    return this.google_token_expires_at && this.google_token_expires_at > new Date();
+};
