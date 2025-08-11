@@ -6,34 +6,63 @@ import { Strategy, VerifyCallback } from 'passport-google-oauth20';
 import { AuthService } from '../auth.service';
 
 /**
- * Google OAuth Strategy для Passport
- * Обрабатывает авторизацию через Google
+ * ИСПРАВЛЕННАЯ Google OAuth Strategy
+ * Основные исправления:
+ * 1. Правильная конфигурация URL
+ * 2. Обработка HTTPS для production
+ * 3. Улучшенная обработка ошибок
  */
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
+    private clientId;
     constructor(
         private configService: ConfigService,
         private authService: AuthService,
     ) {
+        // Получаем конфигурацию с проверкой
+        const clientId = configService.get<string>('google.clientId');
+        const clientSecret = configService.get<string>('google.clientSecret');
+        const callbackURL = configService.get<string>('google.callbackUrl');
+
+        console.log('🔧 Google OAuth конфигурация:');
+        console.log('📍 Client ID:', clientId ? '✅ Найден' : '❌ Не найден');
+        console.log('🔑 Client Secret:', clientSecret ? '✅ Найден' : '❌ Не найден');
+        console.log('🔄 Callback URL:', callbackURL);
+
+        if (!clientId) {
+            throw new Error('GOOGLE_CLIENT_ID не установлен в переменных окружения');
+        }
+        if (!clientSecret) {
+            throw new Error('GOOGLE_CLIENT_SECRET не установлен в переменных окружения');
+        }
+        if (!callbackURL) {
+            throw new Error('GOOGLE_CALLBACK_URL не установлен в переменных окружения');
+        }
+
         super({
-            clientID: configService.get<string>('google.clientId') || '',
-            clientSecret: configService.get<string>('google.clientSecret') || '',
-            callbackURL: configService.get<string>('google.callbackUrl') || '',
-            // ✅ СОВРЕМЕННЫЕ SCOPE (НЕ Google+ API)
+            clientID: clientId || '',
+            clientSecret: clientSecret || '',
+            callbackURL: callbackURL || '',
             scope: [
-                'https://www.googleapis.com/auth/userinfo.email',    // Доступ к email
-                'https://www.googleapis.com/auth/userinfo.profile'   // Доступ к базовому профилю
+                'https://www.googleapis.com/auth/userinfo.email',
+                'https://www.googleapis.com/auth/userinfo.profile'
             ],
+            passReqToCallback: false,
+            skipUserProfile: false,
         });
+
+        // Проверяем обязательные параметры
+        if (!clientId || !clientSecret || !callbackURL) {
+            console.error('❌ ОШИБКА: Не все переменные Google OAuth настроены!');
+            console.error('Проверьте переменные окружения:');
+            console.error('- GOOGLE_CLIENT_ID');
+            console.error('- GOOGLE_CLIENT_SECRET');
+            console.error('- GOOGLE_CALLBACK_URL');
+        }
     }
 
     /**
-     * Callback функция, вызываемая после успешной авторизации в Google
-     * Использует современный Google OAuth 2.0 API (НЕ устаревший Google+ API)
-     * @param accessToken - токен доступа от Google
-     * @param refreshToken - токен обновления от Google
-     * @param profile - профиль пользователя от Google (Google OAuth 2.0 формат)
-     * @param done - callback функция Passport
+     * Callback функция после успешной авторизации в Google
      */
     async validate(
         accessToken: string,
@@ -42,50 +71,35 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
         done: VerifyCallback,
     ): Promise<any> {
         try {
-            console.log('🔍 Google OAuth 2.0 Profile:', JSON.stringify(profile, null, 2));
-            console.log('✅ Используем современный Google OAuth 2.0 API');
+            console.log('🔍 Google OAuth Profile получен:', {
+                id: profile.id,
+                displayName: profile.displayName,
+                emails: profile.emails?.map(e => e.value),
+                provider: profile.provider
+            });
 
-            // Извлекаем данные из профиля Google OAuth 2.0
-            const { id, name, emails, photos, provider } = profile;
-
-            // Проверяем, что используется правильный провайдер
-            if (provider !== 'google') {
-                console.error('❌ Неожиданный провайдер:', provider);
-                return done(new Error('Invalid OAuth provider'), false);
-            }
-
-            // Проверяем наличие обязательных полей
-            if (!id) {
+            // Проверяем базовые поля
+            if (!profile.id) {
                 console.error('❌ Отсутствует Google User ID');
-                return done(new Error('Google profile missing user ID'), false);
+                return done(new Error('Missing Google User ID'), false);
             }
 
-            if (!emails || emails.length === 0) {
+            if (!profile.emails || profile.emails.length === 0) {
                 console.error('❌ Отсутствует email в Google профиле');
-                return done(new Error('Google profile does not have email'), false);
+                return done(new Error('No email provided by Google'), false);
             }
 
-            // Извлекаем данные пользователя
-            const email = emails[0].value;
-            const emailVerified = emails[0].verified || true; // Google emails считаются верифицированными
-            const firstName = name?.givenName || '';
-            const lastName = name?.familyName || '';
-            const fullName = name?.displayName || `${firstName} ${lastName}`.trim();
-            const avatarUrl = photos?.[0]?.value || null;
+            // Извлекаем данные
+            const email = profile.emails[0].value;
+            const firstName = profile.name?.givenName || '';
+            const lastName = profile.name?.familyName || '';
+            const avatarUrl = profile.photos?.[0]?.value || null;
 
-            // Проверяем валидность email
-            if (!email.includes('@')) {
-                console.error('❌ Невалидный email от Google:', email);
-                return done(new Error('Invalid email format from Google'), false);
-            }
+            console.log(`✅ Обрабатываем Google пользователя: ${email}`);
 
-            console.log('📧 Email:', email);
-            console.log('👤 Имя:', firstName, lastName);
-            console.log('✅ Email верифицирован:', emailVerified);
-
-            // Ищем или создаем пользователя через AuthService
+            // Создаем или находим пользователя
             const user = await this.authService.validateGoogleUser({
-                googleId: id,
+                googleId: profile.id,
                 email: email,
                 name: firstName,
                 second_name: lastName,
@@ -94,18 +108,11 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
                 refreshToken,
             });
 
-            console.log('✅ Google OAuth 2.0 User validated:', user.email);
-
+            console.log(`✅ Google пользователь обработан: ${user.email}`);
             return done(null, user);
+
         } catch (error) {
-            console.error('❌ Google OAuth 2.0 validation error:', error);
-
-            // Логируем детали ошибки для дебага
-            if (error.message.includes('plus.') || error.message.includes('Google+')) {
-                console.error('🚨 ВНИМАНИЕ: Обнаружено использование устаревшего Google+ API!');
-                console.error('🔧 Убедитесь, что используете современные scope: userinfo.email, userinfo.profile');
-            }
-
+            console.error('❌ Ошибка Google OAuth validation:', error.message);
             return done(error, false);
         }
     }

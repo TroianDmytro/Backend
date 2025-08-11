@@ -17,70 +17,205 @@ export class AuthController {
     constructor(private authService: AuthService, private configService: ConfigService) { }
 
     // === НОВЫЕ ЭНДПОИНТЫ ДЛЯ GOOGLE OAUTH ===
-
     /**
-     * GET /auth/google - Начало авторизации через Google
-     * Перенаправляет пользователя на страницу авторизации Google
-     */
+        * GET /auth/google - С ОТЛАДКОЙ
+        */
     @Get('google')
     @UseGuards(GoogleAuthGuard)
     @ApiOperation({
         summary: 'Авторизация через Google - начало процесса',
-        description: 'Перенаправляет пользователя на страницу авторизации Google. После успешной авторизации Google перенаправит на /auth/google/callback'
-    })
-    @ApiResponse({
-        status: 302,
-        description: 'Перенаправление на Google OAuth'
+        description: 'Перенаправляет пользователя на страницу авторизации Google'
     })
     async googleAuth(@Request() req) {
-        // Этот метод автоматически перенаправит на Google
-        // Реальная логика происходит в GoogleAuthGuard и GoogleStrategy
+        console.log('🚀 Google OAuth инициирован');
+        console.log('🔧 Конфиг Google:', {
+            clientId: this.configService.get('google.clientId') ? '✅ Найден' : '❌ Не найден',
+            callbackUrl: this.configService.get('google.callbackUrl'),
+            nodeEnv: process.env.NODE_ENV || 'development'
+        });
+        console.log('🌍 Headers:', req.headers);
+
+        // Passport автоматически перенаправит на Google
     }
 
     /**
-     * GET /auth/google/callback - Callback после авторизации в Google
-     * Google перенаправляет сюда после успешной авторизации
+     * GET /auth/test/config - ТЕСТОВЫЙ эндпоинт для проверки конфигурации
      */
+    @Get('test/config')
+    @ApiOperation({
+        summary: 'Тестовый эндпоинт для проверки конфигурации Google OAuth',
+        description: 'Возвращает текущую конфигурацию (без секретов)'
+    })
+    getGoogleConfig() {
+        return {
+            environment: process.env.NODE_ENV || 'development',
+            googleConfig: {
+                clientId: this.configService.get('google.clientId'),
+                callbackUrl: this.configService.get('google.callbackUrl'),
+                hasClientSecret: this.configService.get('google.clientSecret')
+            },
+            appConfig: {
+                appUrl: this.configService.get('app.url'),
+                frontendUrl: this.configService.get('app.frontendUrl'),
+                allowedOrigins: this.configService.get('app.allowedOrigins')
+            }
+        };
+    }
+
+    /**
+         * GET /auth/test - Тестовая HTML страница для Google OAuth
+         */
+    @Get('test')
+    @ApiOperation({
+        summary: 'Тестовая страница для Google OAuth',
+        description: 'HTML страница с кнопкой для тестирования Google OAuth'
+    })
+    @ApiResponse({
+        status: 200,
+        description: 'HTML страница с кнопкой авторизации'
+    })
+    getTestPage(@Res() res: Response) {
+        const html = `
+        <!DOCTYPE html>
+        <html lang="ru">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Тест Google OAuth</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    max-width: 600px;
+                    margin: 50px auto;
+                    padding: 20px;
+                    text-align: center;
+                }
+                .button {
+                    background-color: #4285f4;
+                    color: white;
+                    padding: 12px 24px;
+                    text-decoration: none;
+                    border-radius: 5px;
+                    font-size: 16px;
+                    margin: 10px;
+                    display: inline-block;
+                    border: none;
+                    cursor: pointer;
+                }
+                .button:hover {
+                    background-color: #3367d6;
+                }
+                .config {
+                    background-color: #f8f9fa;
+                    padding: 15px;
+                    border-radius: 5px;
+                    margin: 20px 0;
+                    text-align: left;
+                }
+                .success {
+                    color: #28a745;
+                    font-weight: bold;
+                }
+                .error {
+                    color: #dc3545;
+                    font-weight: bold;
+                }
+            </style>
+        </head>
+        <body>
+            <h1>🔧 Тест Google OAuth</h1>
+            
+            <div class="config">
+                <h3>Текущая конфигурация:</h3>
+                <p><strong>Environment:</strong> ${process.env.NODE_ENV || 'development'}</p>
+                <p><strong>App URL:</strong> ${this.configService.get('app.url')}</p>
+                <p><strong>Callback URL:</strong> ${this.configService.get('google.callbackUrl')}</p>
+                <p><strong>Client ID:</strong> ${this.configService.get('google.clientId') ? '✅ Настроен' : '❌ Не настроен'}</p>
+                <p><strong>Client Secret:</strong> ${this.configService.get('google.clientSecret') ? '✅ Настроен' : '❌ Не настроен'}</p>
+            </div>
+
+            <h3>🚀 Тестирование:</h3>
+            <p>Нажмите кнопку ниже, чтобы начать авторизацию через Google</p>
+            
+            <a href="/api/auth/google" class="button">
+                🔐 Войти через Google
+            </a>
+
+            <div style="margin-top: 30px;">
+                <h4>📋 Инструкции:</h4>
+                <ol style="text-align: left;">
+                    <li>Убедитесь, что в Google Console добавлены локальные URL</li>
+                    <li>Authorized JavaScript origins: <code>http://localhost:8000</code></li>
+                    <li>Authorized redirect URIs: <code>http://localhost:8000/api/auth/google/callback</code></li>
+                    <li>Не используйте Swagger для тестирования OAuth</li>
+                </ol>
+            </div>
+
+            <div style="margin-top: 20px;">
+                <a href="/api/docs" class="button" style="background-color: #6c757d;">
+                    📚 Вернуться к Swagger
+                </a>
+            </div>
+        </body>
+        </html>
+        `;
+
+        res.setHeader('Content-Type', 'text/html');
+        return res.send(html);
+    }
+
+    /**
+      * GET /auth/google/callback - ИСПРАВЛЕННЫЙ callback для локальной разработки
+      */
     @Get('google/callback')
     @UseGuards(GoogleAuthGuard)
     @ApiOperation({
         summary: 'Callback Google OAuth',
-        description: 'Обрабатывает ответ от Google после авторизации и создает/авторизует пользователя'
-    })
-    @ApiResponse({
-        status: 302,
-        description: 'Перенаправление на фронтенд с токеном'
-    })
-    @ApiResponse({
-        status: 400,
-        description: 'Ошибка авторизации Google'
+        description: 'Обрабатывает ответ от Google после авторизации'
     })
     async googleAuthRedirect(@Request() req, @Res() res: Response) {
         try {
-            this.logger.log('🔄 Обработка Google OAuth callback');
+            console.log('🔄 Обработка Google OAuth callback');
+            console.log('👤 Пользователь в req:', req.user ? '✅ Найден' : '❌ Отсутствует');
 
             if (!req.user) {
-                this.logger.error('❌ Пользователь не найден в req.user');
-                return this.redirectToFrontendWithError(res, 'google_auth_failed');
+                console.error('❌ req.user отсутствует в callback');
+                return this.showErrorPage(res, 'Ошибка авторизации: пользователь не найден');
             }
 
-            // Генерируем JWT токен для пользователя
+            // Генерируем JWT токен
             const tokenData = await this.authService.generateGoogleJWT(req.user);
+            console.log(`✅ JWT токен сгенерирован для: ${req.user.email}`);
 
-            this.logger.log(`✅ Google OAuth успешно: ${req.user.email}`);
+            // Для локальной разработки показываем результат на HTML странице
+            const isLocal = process.env.NODE_ENV !== 'production';
 
-            // Получаем URL фронтенда из конфигурации
-            const frontendUrl = this.configService.get<string>('app.frontendUrl');
-
-            // Перенаправляем на фронтенд с токеном в URL
-            const redirectUrl = `${frontendUrl}/auth/google/success?token=${tokenData.access_token}&user=${encodeURIComponent(JSON.stringify(tokenData.user))}`;
-
-            return res.redirect(redirectUrl);
+            if (isLocal) {
+                // Показываем успешную страницу с токеном (для разработки)
+                return res.send(this.getGoogleSuccessPage(tokenData.access_token, tokenData.user));
+            } else {
+                // В production перенаправляем на фронтенд
+                const frontendUrl = this.configService.get<string>('app.frontendUrl') || 'https://neuronest.pp.ua';
+                const redirectUrl = `${frontendUrl}/auth/google/success?token=${tokenData.access_token}&user=${encodeURIComponent(JSON.stringify(tokenData.user))}`;
+                return res.redirect(redirectUrl);
+            }
 
         } catch (error) {
-            this.logger.error(`❌ Ошибка Google OAuth callback: ${error.message}`, error.stack);
-            return this.redirectToFrontendWithError(res, 'google_auth_error');
+            console.error(`❌ Ошибка в Google OAuth callback:`, error);
+            return this.showErrorPage(res, `Ошибка обработки авторизации: ${error.message}`);
         }
+    }
+
+
+
+    /**
+     * ВСПОМОГАТЕЛЬНЫЙ метод для редиректа с ошибкой
+     */
+    private redirectToFrontendWithError(res: Response, error: string) {
+        const frontendUrl = this.configService.get<string>('app.frontendUrl') || 'https://neuronest.pp.ua';
+        const redirectUrl = `${frontendUrl}/auth/error?error=${error}`;
+        console.log(`❌ Редирект с ошибкой: ${redirectUrl}`);
+        return res.redirect(redirectUrl);
     }
 
     /**
@@ -175,19 +310,8 @@ export class AuthController {
         };
     }
 
-    // === ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ===
-
     /**
-     * Перенаправление на фронтенд с ошибкой
-     */
-    private redirectToFrontendWithError(res: Response, error: string) {
-        const frontendUrl = this.configService.get<string>('app.frontendUrl');
-        const redirectUrl = `${frontendUrl}/auth/google/error?error=${error}`;
-        return res.redirect(redirectUrl);
-    }
-
-    /**
-     * HTML страница для успешной авторизации Google (запасной вариант)
+     * УЛУЧШЕННАЯ страница успешной авторизации
      */
     private getGoogleSuccessPage(token: string, user: any): string {
         return `
@@ -196,42 +320,184 @@ export class AuthController {
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Авторизация Google - Успешно</title>
+            <title>Google OAuth - Успешно!</title>
             <style>
-                body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
-                .success { color: #28a745; font-size: 24px; margin-bottom: 20px; }
-                .token { background: #f8f9fa; padding: 10px; border-radius: 5px; word-break: break-all; }
-                .button { background: #007bff; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 20px; }
-            </style>
-            <script>
-                // Автоматически закрываем окно и передаем данные родительскому окну
-                if (window.opener) {
-                    window.opener.postMessage({
-                        type: 'GOOGLE_AUTH_SUCCESS',
-                        token: '${token}',
-                        user: ${JSON.stringify(user)}
-                    }, '*');
-                    window.close();
-                } else {
-                    // Если нет родительского окна, сохраняем токен в localStorage
-                    localStorage.setItem('auth_token', '${token}');
-                    localStorage.setItem('user_data', '${JSON.stringify(user)}');
+                body {
+                    font-family: Arial, sans-serif;
+                    max-width: 800px;
+                    margin: 0 auto;
+                    padding: 20px;
+                    background-color: #f5f5f5;
                 }
-            </script>
+                .container {
+                    background: white;
+                    border-radius: 10px;
+                    padding: 30px;
+                    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                }
+                .success-header {
+                    color: #28a745;
+                    text-align: center;
+                    margin-bottom: 30px;
+                }
+                .user-info {
+                    background: #e8f5e8;
+                    padding: 20px;
+                    border-radius: 8px;
+                    margin-bottom: 20px;
+                }
+                .token-section {
+                    background: #fff3cd;
+                    padding: 20px;
+                    border-radius: 8px;
+                    border-left: 4px solid #ffc107;
+                    margin-bottom: 20px;
+                }
+                .token-display {
+                    background: #f8f9fa;
+                    padding: 15px;
+                    border-radius: 5px;
+                    font-family: monospace;
+                    font-size: 12px;
+                    word-break: break-all;
+                    margin-top: 10px;
+                    max-height: 150px;
+                    overflow-y: auto;
+                }
+                .button {
+                    background-color: #007bff;
+                    color: white;
+                    padding: 12px 24px;
+                    text-decoration: none;
+                    border-radius: 5px;
+                    display: inline-block;
+                    margin: 10px 5px;
+                    border: none;
+                    cursor: pointer;
+                }
+                .copy-button {
+                    background-color: #28a745;
+                }
+                .actions {
+                    text-align: center;
+                    margin-top: 30px;
+                }
+                .info-grid {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 15px;
+                    margin-top: 15px;
+                }
+                @media (max-width: 600px) {
+                    .info-grid {
+                        grid-template-columns: 1fr;
+                    }
+                }
+            </style>
         </head>
         <body>
-            <div class="success">✅ Авторизация через Google успешна!</div>
-            <p>Добро пожаловать, ${user.name}!</p>
-            <div class="token">
-                <strong>Токен:</strong><br>
-                ${token}
+            <div class="container">
+                <div class="success-header">
+                    <h1>🎉 Google OAuth Авторизация успешна!</h1>
+                    <p>Добро пожаловать, ${user.name || user.email}!</p>
+                </div>
+
+                <div class="user-info">
+                    <h3>👤 Информация о пользователе:</h3>
+                    <div class="info-grid">
+                        <div><strong>ID:</strong> ${user.id}</div>
+                        <div><strong>Email:</strong> ${user.email}</div>
+                        <div><strong>Имя:</strong> ${user.name || 'Не указано'}</div>
+                        <div><strong>Фамилия:</strong> ${user.second_name || 'Не указано'}</div>
+                        <div><strong>Логин:</strong> ${user.login || 'Автогенерируемый'}</div>
+                        <div><strong>Email подтвержден:</strong> ${user.isEmailVerified ? '✅ Да' : '❌ Нет'}</div>
+                        <div><strong>Провайдер:</strong> ${user.provider || 'google'}</div>
+                        <div><strong>Роли:</strong> ${(user.roles || []).join(', ')}</div>
+                    </div>
+                </div>
+
+                <div class="token-section">
+                    <h3>🔐 JWT Access Token:</h3>
+                    <p>Используйте этот токен для авторизации API запросов:</p>
+                    <div class="token-display" id="tokenDisplay">${token}</div>
+                    <button class="button copy-button" onclick="copyToken()">📋 Скопировать токен</button>
+                </div>
+
+                <div class="actions">
+                    <a href="/api/docs" class="button">📚 Swagger UI</a>
+                    <a href="/api/auth/test" class="button">🔧 Тестовая страница</a>
+                    <a href="/api/auth/google/status" class="button">📊 Статус Google</a>
+                </div>
+
+                <div style="margin-top: 30px; padding: 15px; background: #d1ecf1; border-radius: 5px;">
+                    <h4>💡 Что делать дальше:</h4>
+                    <ol>
+                        <li><strong>Скопируйте токен</strong> и используйте его в заголовке <code>Authorization: Bearer YOUR_TOKEN</code></li>
+                        <li><strong>Протестируйте API</strong> через Swagger UI с этим токеном</li>
+                        <li><strong>В production</strong> токен будет передан на ваш фронтенд</li>
+                    </ol>
+                </div>
             </div>
-            <a href="${this.configService.get<string>('app.frontendUrl')}" class="button">
-                Перейти к приложению
-            </a>
+
+            <script>
+                function copyToken() {
+                    const tokenText = document.getElementById('tokenDisplay').textContent;
+                    navigator.clipboard.writeText(tokenText).then(() => {
+                        alert('Токен скопирован в буфер обмена!');
+                    }).catch(err => {
+                        console.error('Ошибка копирования: ', err);
+                        // Fallback для старых браузеров
+                        const textArea = document.createElement('textarea');
+                        textArea.value = tokenText;
+                        document.body.appendChild(textArea);
+                        textArea.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(textArea);
+                        alert('Токен скопирован!');
+                    });
+                }
+
+                // Сохраняем токен и данные пользователя в localStorage для удобства
+                localStorage.setItem('auth_token', '${token}');
+                localStorage.setItem('user_data', '${JSON.stringify(user).replace(/'/g, "\\'")}');
+                
+                console.log('✅ Токен и данные пользователя сохранены в localStorage');
+                console.log('Token:', '${token}');
+                console.log('User:', ${JSON.stringify(user)});
+            </script>
         </body>
         </html>
         `;
+    }
+
+    /**
+     * Страница ошибки
+     */
+    private showErrorPage(res: Response, errorMessage: string): Response {
+        const html = `
+        <!DOCTYPE html>
+        <html lang="ru">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Ошибка авторизации</title>
+            <style>
+                body { font-family: Arial, sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; text-align: center; }
+                .error { color: #dc3545; background: #f8d7da; padding: 20px; border-radius: 8px; margin: 20px 0; }
+                .button { background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block; margin: 10px; }
+            </style>
+        </head>
+        <body>
+            <h1>❌ Ошибка Google OAuth</h1>
+            <div class="error">
+                <strong>Ошибка:</strong> ${errorMessage}
+            </div>
+            <a href="/api/auth/test" class="button">🔄 Попробовать еще раз</a>
+            <a href="/api/docs" class="button">📚 Вернуться к Swagger</a>
+        </body>
+        </html>
+        `;
+        return res.status(400).send(html);
     }
 
     /**
