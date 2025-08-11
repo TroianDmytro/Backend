@@ -18,6 +18,8 @@ import configuration from './config/configuration';
 import { HomeworkModule } from './homework/homework.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { PaymentModule } from './payment/payment.module';
+import { SubscriptionPlansModule } from './subscription-plans/subscription-plans.module';
 
 @Module({
   imports: [
@@ -73,9 +75,11 @@ import { AppService } from './app.service';
     CoursesModule,  // Модуль курсов
     LessonsModule,  // Модуль уроков
     HomeworkModule, // Модуль домашних заданий
-    SubscriptionsModule // Модуль подписок
+    SubscriptionsModule, // Модуль подписок
+    SubscriptionPlansModule,
+    PaymentModule, // Добавить этот модуль
   ],
-  controllers: [AppController,AvatarsController],
+  controllers: [AppController, AvatarsController],
   providers: [AppService],
 })
 export class AppModule { }

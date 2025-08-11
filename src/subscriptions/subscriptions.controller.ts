@@ -32,6 +32,7 @@ import { CancelSubscriptionDto } from './dto/cancel-subscription.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { PaymentService } from '../payment/payment.service';
 
 @ApiTags('subscriptions')
 @Controller('subscriptions')
@@ -40,7 +41,10 @@ import { Roles } from '../auth/decorators/roles.decorator';
 export class SubscriptionsController {
     private readonly logger = new Logger(SubscriptionsController.name);
 
-    constructor(private readonly subscriptionsService: SubscriptionsService) { }
+    constructor(
+        private readonly subscriptionsService: SubscriptionsService,
+        private readonly paymentService: PaymentService
+    ) { }
 
     /**
      * POST /subscriptions - Создание новой подписки
@@ -64,17 +68,10 @@ export class SubscriptionsController {
         @Body() createSubscriptionDto: CreateSubscriptionDto,
         @Request() req?
     ) {
-        // const currentUserId = req?.user?.userId;
-        // const isAdmin = req?.user?.roles?.includes('admin');
         const currentUserId = 'temp-user-id'; // Временно для работы без JWT
         const isAdmin = true; // Временно для работы без JWT
 
         this.logger.log(`Создание подписки для пользователя: ${createSubscriptionDto.userId}`);
-
-        // Если не админ, пользователь может создать подписку только для себя
-        // if (!isAdmin && createSubscriptionDto.userId !== currentUserId) {
-        //     throw new ForbiddenException('Вы можете создавать подписки только для себя');
-        // }
 
         const subscription = await this.subscriptionsService.create(createSubscriptionDto);
 
@@ -84,9 +81,8 @@ export class SubscriptionsController {
         };
     }
 
-    /**
-     * GET /subscriptions - Получение списка подписок с фильтрацией
-     */
+
+    //GET /subscriptions - Получение списка подписок с фильтрацией
     @Get()
     @UseGuards(RolesGuard)
     @Roles('admin', 'user')
@@ -112,17 +108,10 @@ export class SubscriptionsController {
         @Query() filters: SubscriptionFilterDto,
         @Request() req?
     ) {
-        // const currentUserId = req?.user?.userId;
-        // const isAdmin = req?.user?.roles?.includes('admin');
         const currentUserId = 'temp-user-id'; // Временно для работы без JWT
         const isAdmin = true; // Временно для работы без JWT
 
         this.logger.log(`Запрос списка подписок. Страница: ${page}, Лимит: ${limit}`);
-
-        // Обычные пользователи видят только свои подписки
-        // if (!isAdmin) {
-        //     filters.userId = currentUserId;
-        // }
 
         const result = await this.subscriptionsService.findAll(filters, page, limit);
 
@@ -157,8 +146,6 @@ export class SubscriptionsController {
         @Param('id') id: string,
         @Request() req?
     ) {
-        // const currentUserId = req?.user?.userId;
-        // const isAdmin = req?.user?.roles?.includes('admin');
         const currentUserId = 'temp-user-id'; // Временно для работы без JWT
         const isAdmin = true; // Временно для работы без JWT
 
@@ -168,11 +155,6 @@ export class SubscriptionsController {
         if (!subscription) {
             throw new NotFoundException('Подписка не найдена');
         }
-
-        // Проверяем права доступа
-        // if (!isAdmin && subscription.userId.toString() !== currentUserId) {
-        //     throw new ForbiddenException('У вас нет доступа к этой подписке');
-        // }
 
         return { subscription };
     }
@@ -202,8 +184,6 @@ export class SubscriptionsController {
         @Body() updateSubscriptionDto: UpdateSubscriptionDto,
         @Request() req?
     ) {
-        // const currentUserId = req?.user?.userId;
-        // const isAdmin = req?.user?.roles?.includes('admin');
         const currentUserId = 'temp-user-id'; // Временно для работы без JWT
         const isAdmin = true; // Временно для работы без JWT
 
@@ -216,6 +196,7 @@ export class SubscriptionsController {
             subscription: updatedSubscription
         };
     }
+
 
     /**
      * DELETE /subscriptions/:id - Удаление подписки
@@ -261,8 +242,6 @@ export class SubscriptionsController {
         @Body() cancelDto: CancelSubscriptionDto,
         @Request() req?
     ) {
-        // const currentUserId = req?.user?.userId;
-        // const isAdmin = req?.user?.roles?.includes('admin');
         const currentUserId = 'temp-user-id'; // Временно для работы без JWT
         const isAdmin = true; // Временно для работы без JWT
 
@@ -283,6 +262,7 @@ export class SubscriptionsController {
             subscription: cancelledSubscription
         };
     }
+
 
     /**
      * POST /subscriptions/:id/renew - Продление подписки
@@ -325,8 +305,6 @@ export class SubscriptionsController {
         @Body('auto_renewal') autoRenewal: boolean = false,
         @Request() req?
     ) {
-        // const currentUserId = req?.user?.userId;
-        // const isAdmin = req?.user?.roles?.includes('admin');
         const currentUserId = 'temp-user-id'; // Временно для работы без JWT
         const isAdmin = true; // Временно для работы без JWT
 
@@ -394,6 +372,106 @@ export class SubscriptionsController {
         };
     }
 
+
+    //***POST /subscriptions/:id/pay - Создание платежа для подписки
+    @Post(':id/pay')
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'user')
+    @ApiOperation({
+        summary: 'Создание платежа для подписки',
+        description: 'Создает платеж через Monobank для указанной подписки'
+    })
+    @ApiParam({ name: 'id', description: 'ID подписки' })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                currency: {
+                    type: 'string',
+                    enum: ['UAH', 'USD', 'EUR'],
+                    default: 'UAH',
+                    description: 'Валюта платежа'
+                },
+                redirectUrl: {
+                    type: 'string',
+                    description: 'URL для редиректа после оплаты',
+                    example: 'https://mysite.com/payment/success'
+                }
+            }
+        }
+    })
+    @ApiResponse({
+        status: 201,
+        description: 'Платеж создан',
+        schema: {
+            type: 'object',
+            properties: {
+                message: { type: 'string' },
+                paymentId: { type: 'string', description: 'ID созданного платежа' },
+                pageUrl: { type: 'string', description: 'URL страницы оплаты Monobank' },
+                amount: { type: 'number', description: 'Сумма платежа' },
+                currency: { type: 'string', description: 'Валюта' },
+                subscription: {
+                    type: 'object',
+                    properties: {
+                        id: { type: 'string' },
+                        type: { type: 'string' },
+                        startDate: { type: 'string', format: 'date-time' },
+                        endDate: { type: 'string', format: 'date-time' }
+                    }
+                }
+            }
+        }
+    })
+    @ApiResponse({ status: 400, description: 'Подписка уже оплачена или недоступна для оплаты' })
+    @ApiResponse({ status: 404, description: 'Подписка не найдена' })
+    async createSubscriptionPayment(
+        @Param('id') subscriptionId: string,
+        @Body('currency') currency: string = 'UAH',
+        @Body('redirectUrl') redirectUrl?: string,
+        @Request() req?
+    ) {
+        const currentUserId = 'temp-user-id'; // Временно для работы без JWT
+        const isAdmin = true; // Временно для работы без JWT
+
+        this.logger.log(`Создание платежа для подписки: ${subscriptionId}`);
+
+        // Получаем подписку
+        const subscription = await this.subscriptionsService.findById(subscriptionId);
+        if (!subscription) {
+            throw new NotFoundException('Подписка не найдена');
+        }
+
+        // Проверяем, что подписка не оплачена
+        if (subscription.is_paid) {
+            throw new BadRequestException('Подписка уже оплачена');
+        }
+
+        // ИСПРАВЛЕНО: используем инжектированный PaymentService
+        const result = await this.paymentService.createPayment({
+            subscriptionId,
+            amount: subscription.price,
+            currency,
+            description: `Оплата подписки на ${subscription.subscription_type === 'course' ? 'курс' : 'период'}`,
+            redirectUrl
+        });
+
+        return {
+            message: 'Платеж создан. Перейдите по ссылке для оплаты.',
+            paymentId: result.payment.id,
+            pageUrl: result.pageUrl,
+            amount: subscription.price,
+            currency: currency,
+            subscription: {
+                id: subscription.id,
+                type: subscription.subscription_type,
+                startDate: subscription.start_date,
+                endDate: subscription.end_date
+            }
+        };
+    }
+
+
     /**
      * GET /subscriptions/user/:userId - Получение подписок пользователя
      */
@@ -416,17 +494,10 @@ export class SubscriptionsController {
         @Query('status') status?: 'active' | 'expired' | 'cancelled' | 'pending',
         @Request() req?
     ) {
-        // const currentUserId = req?.user?.userId;
-        // const isAdmin = req?.user?.roles?.includes('admin');
         const currentUserId = 'temp-user-id'; // Временно для работы без JWT
         const isAdmin = true; // Временно для работы без JWT
 
         this.logger.log(`Получение подписок пользователя: ${userId}`);
-
-        // Проверяем права доступа
-        // if (!isAdmin && userId !== currentUserId) {
-        //     throw new ForbiddenException('У вас нет доступа к подпискам этого пользователя');
-        // }
 
         const subscriptions = await this.subscriptionsService.findByUserId(userId, status);
 
@@ -436,7 +507,6 @@ export class SubscriptionsController {
             totalSubscriptions: subscriptions.length
         };
     }
-
     /**
      * GET /subscriptions/course/:courseId - Получение подписок на курс
      */

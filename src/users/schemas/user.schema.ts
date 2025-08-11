@@ -133,7 +133,6 @@ UserSchema.index({ roles: 1 });
 UserSchema.index({ isBlocked: 1 });
 UserSchema.index({ isEmailVerified: 1 });
 UserSchema.index({ verificationCode: 1 });
-UserSchema.index({ googleId: 1 }); // Индекс для Google ID
 UserSchema.index({ is_google_user: 1 }); // Индекс для типа пользователя
 
 // Добавляем методы в интерфейс UserDocument
