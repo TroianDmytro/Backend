@@ -1,26 +1,9 @@
 // src/subscription-plans/subscription-plans.service.ts
-import { Injectable, Logger, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { SubscriptionPlan, SubscriptionPlanDocument } from './schemas/subscription-plan.schema';
-
-interface CreatePlanDto {
-    name: string;
-    slug: string;
-    description: string;
-    period_type: '1_month' | '3_months' | '6_months' | '12_months';
-    price: number;
-    currency?: string;
-    discount_percent?: number;
-    original_price?: number;
-    is_popular?: boolean;
-    is_featured?: boolean;
-    features?: string[];
-    benefits?: string[];
-    color?: string;
-    icon?: string;
-    sort_order?: number;
-}
+import { CreatePlanDto, UpdatePlanDto } from './dto/subscription-plan.dto';
 
 @Injectable()
 export class SubscriptionPlansService {
@@ -29,6 +12,231 @@ export class SubscriptionPlansService {
     constructor(
         @InjectModel(SubscriptionPlan.name) private planModel: Model<SubscriptionPlanDocument>
     ) { }
+
+    /**
+     * Получение всех планов с пагинацией
+     */
+    async getAllPlans(page: number = 1, limit: number = 10, activeOnly: boolean = true): Promise<{
+        plans: SubscriptionPlanDocument[];
+        totalItems: number;
+        totalPages: number;
+    }> {
+        const skip = (page - 1) * limit;
+        const filter = activeOnly ? { is_active: true } : {};
+
+        const [plans, totalItems] = await Promise.all([
+            this.planModel
+                .find(filter)
+                .sort({ sort_order: 1, price: 1 })
+                .skip(skip)
+                .limit(limit)
+                .exec(),
+            this.planModel.countDocuments(filter).exec()
+        ]);
+
+        const totalPages = Math.ceil(totalItems / limit);
+
+        return { plans, totalItems, totalPages };
+    }
+
+    /**
+     * Получение плана по ID
+     */
+    async getPlanById(id: string): Promise<SubscriptionPlanDocument> {
+        const plan = await this.planModel.findById(id).exec();
+        if (!plan) {
+            throw new NotFoundException(`Тарифный план с ID ${id} не найден`);
+        }
+        return plan;
+    }
+
+    /**
+     * Создание индивидуального плана
+     */
+    async createCustomPlan(planData: CreatePlanDto): Promise<SubscriptionPlanDocument> {
+        // Проверяем уникальность slug
+        const existingPlan = await this.planModel.findOne({ slug: planData.slug }).exec();
+        if (existingPlan) {
+            throw new ConflictException(`План с slug "${planData.slug}" уже существует`);
+        }
+
+        // Проверяем уникальность названия
+        const existingName = await this.planModel.findOne({ name: planData.name }).exec();
+        if (existingName) {
+            throw new ConflictException(`План с названием "${planData.name}" уже существует`);
+        }
+
+        // Валидируем скидку
+        if (planData.discount_percent && planData.discount_percent > 0) {
+            if (!planData.original_price) {
+                throw new BadRequestException('Для скидочного плана необходимо указать оригинальную цену');
+            }
+            if (planData.original_price <= planData.price) {
+                throw new BadRequestException('Оригинальная цена должна быть больше текущей цены');
+            }
+        }
+
+        const newPlan = new this.planModel({
+            ...planData,
+            currency: planData.currency || 'UAH',
+            is_active: planData.is_active !== undefined ? planData.is_active : true,
+            subscribers_count: 0,
+            total_revenue: 0
+        });
+
+        const savedPlan = await newPlan.save();
+        this.logger.log(`✨ Создан индивидуальный план: "${savedPlan.name}"`);
+
+        return savedPlan;
+    }
+
+    /**
+     * Обновление тарифного плана
+     */
+    async updatePlan(id: string, updateData: UpdatePlanDto): Promise<SubscriptionPlanDocument> {
+        const plan = await this.planModel.findById(id).exec();
+        if (!plan) {
+            throw new NotFoundException(`Тарифный план с ID ${id} не найден`);
+        }
+
+        // Проверяем уникальность slug (если он изменяется)
+        if (updateData.slug && updateData.slug !== plan.slug) {
+            const existingSlug = await this.planModel.findOne({
+                slug: updateData.slug,
+                _id: { $ne: id }
+            }).exec();
+            if (existingSlug) {
+                throw new ConflictException(`План с slug "${updateData.slug}" уже существует`);
+            }
+        }
+
+        // Проверяем уникальность названия (если оно изменяется)
+        if (updateData.name && updateData.name !== plan.name) {
+            const existingName = await this.planModel.findOne({
+                name: updateData.name,
+                _id: { $ne: id }
+            }).exec();
+            if (existingName) {
+                throw new ConflictException(`План с названием "${updateData.name}" уже существует`);
+            }
+        }
+
+        // Валидируем скидку
+        const finalPrice = updateData.price !== undefined ? updateData.price : plan.price;
+        const finalOriginalPrice = updateData.original_price !== undefined ? updateData.original_price : plan.original_price;
+        const finalDiscountPercent = updateData.discount_percent !== undefined ? updateData.discount_percent : plan.discount_percent;
+
+        if (finalDiscountPercent && finalDiscountPercent > 0) {
+            if (!finalOriginalPrice) {
+                throw new BadRequestException('Для скидочного плана необходимо указать оригинальную цену');
+            }
+            if (finalOriginalPrice <= finalPrice) {
+                throw new BadRequestException('Оригинальная цена должна быть больше текущей цены');
+            }
+        }
+
+        // Обновляем план
+        Object.assign(plan, updateData);
+        const updatedPlan = await plan.save();
+
+        this.logger.log(`📝 Обновлен план: "${updatedPlan.name}"`);
+        return updatedPlan;
+    }
+
+    /**
+     * Удаление или деактивация плана
+     */
+    async deletePlan(id: string, force: boolean = false): Promise<{ deleted: boolean }> {
+        const plan = await this.planModel.findById(id).exec();
+        if (!plan) {
+            throw new NotFoundException(`Тарифный план с ID ${id} не найден`);
+        }
+
+        // Проверяем, есть ли активные подписки на этот план
+        // TODO: Добавить проверку через SubscriptionsService когда он будет доступен
+        // const activeSubscriptions = await this.subscriptionsService.countActiveSubscriptionsByPlan(id);
+        // if (activeSubscriptions > 0 && force) {
+        //     throw new ConflictException(`Нельзя удалить план с ${activeSubscriptions} активными подписками`);
+        // }
+
+        if (force) {
+            // Принудительное удаление
+            await this.planModel.findByIdAndDelete(id).exec();
+            this.logger.log(`🗑️ Удален план: "${plan.name}"`);
+            return { deleted: true };
+        } else {
+            // Деактивация
+            plan.is_active = false;
+            await plan.save();
+            this.logger.log(`🔒 Деактивирован план: "${plan.name}"`);
+            return { deleted: false };
+        }
+    }
+
+    /**
+     * Активация/деактивация плана
+     */
+    async toggleActivation(id: string, isActive: boolean): Promise<SubscriptionPlanDocument> {
+        const plan = await this.planModel.findById(id).exec();
+        if (!plan) {
+            throw new NotFoundException(`Тарифный план с ID ${id} не найден`);
+        }
+
+        plan.is_active = isActive;
+        const updatedPlan = await plan.save();
+
+        this.logger.log(`${isActive ? '✅ Активирован' : '❌ Деактивирован'} план: "${plan.name}"`);
+        return updatedPlan;
+    }
+
+    /**
+     * Получение статистики планов
+     */
+    async getStatistics(): Promise<any> {
+        const [
+            totalPlans,
+            activePlans,
+            popularPlans,
+            featuredPlans,
+            totalSubscribers,
+            totalRevenue,
+            topPlans
+        ] = await Promise.all([
+            this.planModel.countDocuments().exec(),
+            this.planModel.countDocuments({ is_active: true }).exec(),
+            this.planModel.countDocuments({ is_popular: true, is_active: true }).exec(),
+            this.planModel.countDocuments({ is_featured: true, is_active: true }).exec(),
+            this.planModel.aggregate([
+                { $group: { _id: null, total: { $sum: '$subscribers_count' } } }
+            ]).exec().then(result => result[0]?.total || 0),
+            this.planModel.aggregate([
+                { $group: { _id: null, total: { $sum: '$total_revenue' } } }
+            ]).exec().then(result => result[0]?.total || 0),
+            this.planModel
+                .find({ is_active: true })
+                .sort({ subscribers_count: -1 })
+                .limit(5)
+                .select('name subscribers_count total_revenue')
+                .exec()
+        ]);
+
+        return {
+            totalPlans,
+            activePlans,
+            inactivePlans: totalPlans - activePlans,
+            popularPlans,
+            featuredPlans,
+            totalSubscribers,
+            totalRevenue,
+            averageRevenuePerPlan: totalPlans > 0 ? Math.round(totalRevenue / totalPlans) : 0,
+            topPlans: topPlans.map(plan => ({
+                id: plan.id,
+                name: plan.name,
+                subscribers: plan.subscribers_count,
+                revenue: plan.total_revenue
+            }))
+        };
+    }
 
     /**
      * Создание базовых тарифных планов
@@ -192,28 +400,6 @@ export class SubscriptionPlansService {
     }
 
     /**
-     * Создание индивидуального плана
-     */
-    async createCustomPlan(planData: CreatePlanDto): Promise<SubscriptionPlanDocument> {
-        // Проверяем уникальность slug
-        const existingPlan = await this.planModel.findOne({ slug: planData.slug }).exec();
-        if (existingPlan) {
-            throw new ConflictException(`План с slug "${planData.slug}" уже существует`);
-        }
-
-        const newPlan = new this.planModel({
-            ...planData,
-            currency: planData.currency || 'UAH',
-            is_active: true
-        });
-
-        const savedPlan = await newPlan.save();
-        this.logger.log(`✨ Создан индивидуальный план: "${savedPlan.name}"`);
-
-        return savedPlan;
-    }
-
-    /**
      * Обновление статистики плана
      */
     async updatePlanStats(planId: string, subscribersCount: number, revenue: number): Promise<void> {
@@ -259,5 +445,64 @@ export class SubscriptionPlansService {
     async recreateBasicPlans(): Promise<SubscriptionPlanDocument[]> {
         await this.clearAllPlans();
         return this.seedBasicPlans();
+    }
+
+    /**
+     * Поиск планов по критериям
+     */
+    async searchPlans(query: {
+        name?: string;
+        period_type?: string;
+        currency?: string;
+        min_price?: number;
+        max_price?: number;
+        is_popular?: boolean;
+        is_featured?: boolean;
+    }): Promise<SubscriptionPlanDocument[]> {
+        const filter: any = { is_active: true };
+
+        if (query.name) {
+            filter.name = { $regex: query.name, $options: 'i' };
+        }
+
+        if (query.period_type) {
+            filter.period_type = query.period_type;
+        }
+
+        if (query.currency) {
+            filter.currency = query.currency;
+        }
+
+        if (query.min_price !== undefined || query.max_price !== undefined) {
+            filter.price = {};
+            if (query.min_price !== undefined) filter.price.$gte = query.min_price;
+            if (query.max_price !== undefined) filter.price.$lte = query.max_price;
+        }
+
+        if (query.is_popular !== undefined) {
+            filter.is_popular = query.is_popular;
+        }
+
+        if (query.is_featured !== undefined) {
+            filter.is_featured = query.is_featured;
+        }
+
+        return this.planModel
+            .find(filter)
+            .sort({ sort_order: 1, price: 1 })
+            .exec();
+    }
+
+    /**
+     * Получение планов по периоду
+     */
+    async getPlansByPeriod(periodType: string): Promise<SubscriptionPlanDocument[]> {
+        return this.planModel
+            .find({
+                period_type: periodType,
+                is_active: true
+            })
+            .sort({ price: 1 })
+            .exec();
     }
 }
