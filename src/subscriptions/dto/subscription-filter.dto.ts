@@ -1,18 +1,19 @@
 // src/subscriptions/dto/subscription-filter.dto.ts
 import {
+    
     IsOptional,
-    IsEnum,
+    IsBoolean,
     IsMongoId,
+    IsEnum,
     IsDateString,
-    IsString,
-    IsBoolean
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+
 
 export class SubscriptionFilterDto {
     @ApiProperty({
         example: '507f1f77bcf86cd799439011',
-        description: 'Фильтр по ID пользователя',
+        description: 'Фильтр по пользователю',
         required: false
     })
     @IsMongoId()
@@ -21,22 +22,22 @@ export class SubscriptionFilterDto {
 
     @ApiProperty({
         example: '507f1f77bcf86cd799439012',
-        description: 'Фильтр по ID плана',
+        description: 'Фильтр по курсу',
         required: false
     })
     @IsMongoId()
     @IsOptional()
-    planId?: string;
+    courseId?: string;
 
     @ApiProperty({
         example: 'active',
         description: 'Фильтр по статусу',
-        enum: ['pending', 'active', 'expired', 'cancelled', 'suspended'],
+        enum: ['active', 'expired', 'cancelled', 'pending'],
         required: false
     })
-    @IsEnum(['pending', 'active', 'expired', 'cancelled', 'suspended'])
+    @IsEnum(['active', 'expired', 'cancelled', 'pending'])
     @IsOptional()
-    status?: 'pending' | 'active' | 'expired' | 'cancelled' | 'suspended';
+    status?: 'active' | 'expired' | 'cancelled' | 'pending';
 
     @ApiProperty({
         example: 'course',
@@ -46,50 +47,61 @@ export class SubscriptionFilterDto {
     })
     @IsEnum(['course', 'period'])
     @IsOptional()
-    type?: 'course' | 'period';
+    subscription_type?: 'course' | 'period';
+
+    @ApiProperty({
+        example: '3_months',
+        description: 'Фильтр по типу периода',
+        enum: ['1_month', '3_months', '6_months', '12_months'],
+        required: false
+    })
+    @IsEnum(['1_month', '3_months', '6_months', '12_months'])
+    @IsOptional()
+    period_type?: '1_month' | '3_months' | '6_months' | '12_months';
 
     @ApiProperty({
         example: true,
-        description: 'Только активные подписки',
+        description: 'Только оплаченные подписки',
         required: false
     })
     @IsBoolean()
     @IsOptional()
-    only_active?: boolean;
+    is_paid?: boolean;
 
     @ApiProperty({
-        example: '2024-01-01T00:00:00Z',
-        description: 'Подписки, созданные после даты',
+        example: true,
+        description: 'Только подписки с автопродлением',
+        required: false
+    })
+    @IsBoolean()
+    @IsOptional()
+    auto_renewal?: boolean;
+
+    @ApiProperty({
+        example: '2024-01-01',
+        description: 'Дата начала периода (от)',
         required: false
     })
     @IsDateString()
     @IsOptional()
-    created_after?: string;
+    start_date_from?: string;
 
     @ApiProperty({
-        example: '2024-12-31T23:59:59Z',
-        description: 'Подписки, созданные до даты',
+        example: '2024-12-31',
+        description: 'Дата начала периода (до)',
         required: false
     })
     @IsDateString()
     @IsOptional()
-    created_before?: string;
+    start_date_to?: string;
 
     @ApiProperty({
-        example: '2024-04-30T23:59:59Z',
-        description: 'Подписки, истекающие до даты',
+        example: 'USD',
+        description: 'Фильтр по валюте',
+        enum: ['USD', 'EUR', 'UAH'],
         required: false
     })
-    @IsDateString()
+    @IsEnum(['USD', 'EUR', 'UAH'])
     @IsOptional()
-    expires_before?: string;
-
-    @ApiProperty({
-        example: 'user@example.com',
-        description: 'Поиск по email пользователя',
-        required: false
-    })
-    @IsString()
-    @IsOptional()
-    user_email?: string;
+    currency?: string;
 }

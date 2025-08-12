@@ -1,63 +1,46 @@
 // src/payment/dto/create-payment.dto.ts
-import {
-    IsNotEmpty,
-    IsMongoId,
-    IsOptional,
-    IsString,
-    IsObject
-} from 'class-validator';
+import { IsNotEmpty, IsNumber, IsString, IsEnum, IsOptional, IsMongoId, Min } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreatePaymentDto {
     @ApiProperty({
         example: '507f1f77bcf86cd799439011',
-        description: 'ID пользователя'
+        description: 'ID подписки для оплаты'
     })
     @IsMongoId()
     @IsNotEmpty()
-    userId: string;
+    subscriptionId: string;
 
     @ApiProperty({
-        example: '507f1f77bcf86cd799439012',
-        description: 'ID плана подписки'
+        example: 299.99,
+        description: 'Сумма платежа в указанной валюте'
     })
-    @IsMongoId()
-    @IsNotEmpty()
-    planId: string;
+    @IsNumber()
+    @Min(0.01)
+    amount: number;
 
     @ApiProperty({
-        example: 'https://mysite.com/success',
+        example: 'UAH',
+        description: 'Валюта платежа',
+        enum: ['UAH', 'USD', 'EUR']
+    })
+    @IsEnum(['UAH', 'USD', 'EUR'])
+    currency: string;
+
+    @ApiProperty({
+        example: 'Оплата подписки на курс JavaScript',
+        description: 'Описание платежа'
+    })
+    @IsString()
+    @IsNotEmpty()
+    description: string;
+
+    @ApiProperty({
+        example: 'https://mysite.com/payment/success',
         description: 'URL для редиректа после успешной оплаты',
         required: false
     })
     @IsString()
     @IsOptional()
-    success_url?: string;
-
-    @ApiProperty({
-        example: 'https://mysite.com/cancel',
-        description: 'URL для редиректа после отмены оплаты',
-        required: false
-    })
-    @IsString()
-    @IsOptional()
-    cancel_url?: string;
-
-    @ApiProperty({
-        example: { coupon_code: 'DISCOUNT10' },
-        description: 'Дополнительные метаданные',
-        required: false
-    })
-    @IsObject()
-    @IsOptional()
-    metadata?: Record<string, any>;
+    redirectUrl?: string;
 }
-
-
-
-
-
-
-
-
-

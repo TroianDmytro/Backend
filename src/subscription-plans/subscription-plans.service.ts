@@ -1,446 +1,192 @@
 // src/subscription-plans/subscription-plans.service.ts
-import { Injectable, NotFoundException, ConflictException, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import * as mongoose from 'mongoose';
 import { SubscriptionPlan, SubscriptionPlanDocument } from './schemas/subscription-plan.schema';
-import { Course, CourseDocument } from '../courses/schemas/course.schema';
-import { CreateSubscriptionPlanDto } from './dto/create-subscription-plan.dto';
-import { UpdateSubscriptionPlanDto } from './dto/update-subscription-plan.dto';
-import { SubscriptionPlanFilterDto } from './dto/subscription-plan-filter.dto';
+import { CreatePlanDto, UpdatePlanDto } from './dto/subscription-plan.dto';
 
 @Injectable()
 export class SubscriptionPlansService {
     private readonly logger = new Logger(SubscriptionPlansService.name);
 
     constructor(
-        @InjectModel(SubscriptionPlan.name) private subscriptionPlanModel: Model<SubscriptionPlanDocument>,
-        @InjectModel(Course.name) private courseModel: Model<CourseDocument>,
-    ) {
-        this.initializeDefaultPlans();
-    }
+        @InjectModel(SubscriptionPlan.name) private planModel: Model<SubscriptionPlanDocument>
+    ) { }
 
     /**
-     * Инициализация стандартных планов подписки при старте приложения
+     * Получение всех планов с пагинацией
      */
-    private async initializeDefaultPlans(): Promise<void> {
-        try {
-            const count = await this.subscriptionPlanModel.estimatedDocumentCount();
-            if (count === 0) {
-                this.logger.log('Создание стандартных планов подписки...');
-
-                const defaultPlans = [
-                    {
-                        name: 'Базовая подписка на месяц',
-                        description: 'Доступ ко всем курсам на 1 месяц',
-                        type: 'period' as const,
-                        price: 49900, // 499 грн
-                        currency: 'UAH',
-                        duration_months: 1,
-                        includes_all_courses: true,
-                        included_features: ['Все курсы', 'Мобильное приложение', 'Поддержка']
-                    },
-                    {
-                        name: 'Стандартная подписка на 3 месяца',
-                        description: 'Доступ ко всем курсам на 3 месяца со скидкой',
-                        type: 'period' as const,
-                        price: 119900, // 1199 грн
-                        currency: 'UAH',
-                        duration_months: 3,
-                        discount_percent: 20,
-                        includes_all_courses: true,
-                        included_features: ['Все курсы', 'Мобильное приложение', 'Поддержка', 'Сертификаты']
-                    },
-                    {
-                        name: 'Премиум подписка на год',
-                        description: 'Годовая подписка со всеми возможностями',
-                        type: 'period' as const,
-                        price: 399900, // 3999 грн
-                        currency: 'UAH',
-                        duration_months: 12,
-                        discount_percent: 33,
-                        includes_all_courses: true,
-                        included_features: [
-                            'Все курсы',
-                            'Приоритетная поддержка',
-                            'Сертификаты',
-                            'Закрытые вебинары',
-                            'Личный ментор'
-                        ]
-                    }
-                ];
-
-                for (const planData of defaultPlans) {
-                    await this.subscriptionPlanModel.create(planData);
-                }
-
-                this.logger.log('Стандартные планы подписки созданы');
-            }
-        } catch (error) {
-            this.logger.error('Ошибка инициализации стандартных планов:', error);
-        }
-    }
-
-    /**
-     * Создание нового плана подписки
-     */
-    async create(createDto: CreateSubscriptionPlanDto): Promise<SubscriptionPlanDocument> {
-        this.logger.log(`Создание плана подписки: ${createDto.name}`);
-
-        // Валидация для планов курсов
-        if (createDto.type === 'course') {
-            if (!createDto.courseId) {
-                throw new BadRequestException('ID курса обязателен для планов типа "course"');
-            }
-
-            // Проверяем существование курса
-            const course = await this.courseModel.findById(createDto.courseId).exec();
-            if (!course) {
-                throw new NotFoundException(`Курс с ID ${createDto.courseId} не найден`);
-            }
-
-            // Проверяем, нет ли уже плана для этого курса
-            const existingCoursePlan = await this.subscriptionPlanModel.findOne({
-                type: 'course',
-                courseId: createDto.courseId,
-                is_active: true
-            }).exec();
-
-            if (existingCoursePlan) {
-                throw new ConflictException(`План подписки для курса ${createDto.courseId} уже существует`);
-            }
-        }
-
-        // Валидация для периодических планов
-        if (createDto.type === 'period' && !createDto.includes_all_courses && !createDto.excluded_courses?.length) {
-            throw new BadRequestException('Для периодических планов должно быть указано includes_all_courses или excluded_courses');
-        }
-
-        const newPlan = new this.subscriptionPlanModel({
-            ...createDto,
-            current_subscriptions: 0,
-            total_purchases: 0,
-            total_revenue: 0,
-            average_rating: 0,
-            available_from: createDto.available_from ? new Date(createDto.available_from) : undefined,
-            available_until: createDto.available_until ? new Date(createDto.available_until) : undefined
-        });
-
-        const savedPlan = await newPlan.save();
-        this.logger.log(`План подписки создан: ${savedPlan.id}`);
-
-        // Возвращаем с populate для course
-        return this.findByIdWithPopulate(savedPlan.id);
-    }
-
-    /**
-     * Получение всех планов с фильтрацией и пагинацией
-     */
-    async findAll(
-        filters: SubscriptionPlanFilterDto = {},
-        page: number = 1,
-        limit: number = 10,
-        includeInactive: boolean = false
-    ): Promise<{
+    async getAllPlans(page: number = 1, limit: number = 10, activeOnly: boolean = true): Promise<{
         plans: SubscriptionPlanDocument[];
         totalItems: number;
         totalPages: number;
-        currentPage: number;
     }> {
-        this.logger.log(`Получение планов подписки. Страница: ${page}, Лимит: ${limit}`);
-
         const skip = (page - 1) * limit;
-        const query: any = {};
-
-        // Фильтры
-        if (filters.type) {
-            query.type = filters.type;
-        }
-
-        if (!includeInactive) {
-            query.is_active = true;
-        }
-
-        if (filters.is_active !== undefined) {
-            query.is_active = filters.is_active;
-        }
-
-        if (filters.is_available !== undefined) {
-            query.is_available = filters.is_available;
-        }
-
-        if (filters.courseId) {
-            query.courseId = filters.courseId;
-        }
-
-        // Фильтр по цене
-        if (filters.min_price || filters.max_price) {
-            query.price = {};
-            if (filters.min_price) {
-                query.price.$gte = filters.min_price;
-            }
-            if (filters.max_price) {
-                query.price.$lte = filters.max_price;
-            }
-        }
-
-        // Поиск по названию
-        if (filters.search) {
-            query.$or = [
-                { name: { $regex: filters.search, $options: 'i' } },
-                { description: { $regex: filters.search, $options: 'i' } }
-            ];
-        }
+        const filter = activeOnly ? { is_active: true } : {};
 
         const [plans, totalItems] = await Promise.all([
-            this.subscriptionPlanModel
-                .find(query)
-                .populate('courseId', 'title image_url teacherId')
-                .populate({
-                    path: 'courseId',
-                    populate: {
-                        path: 'teacherId',
-                        select: 'name second_name'
-                    }
-                })
+            this.planModel
+                .find(filter)
+                .sort({ sort_order: 1, price: 1 })
                 .skip(skip)
                 .limit(limit)
-                .sort({ createdAt: -1 })
                 .exec(),
-            this.subscriptionPlanModel.countDocuments(query).exec()
+            this.planModel.countDocuments(filter).exec()
         ]);
 
         const totalPages = Math.ceil(totalItems / limit);
 
-        return {
-            plans,
-            totalItems,
-            totalPages,
-            currentPage: page
-        };
+        return { plans, totalItems, totalPages };
     }
 
     /**
      * Получение плана по ID
      */
-    async findById(id: string): Promise<SubscriptionPlanDocument | null> {
-        if (!this.isValidObjectId(id)) {
-            throw new BadRequestException('Некорректный ID плана');
-        }
-
-        return this.subscriptionPlanModel.findById(id).exec();
-    }
-
-    /**
-     * Получение плана по ID с populate
-     */
-    async findByIdWithPopulate(id: string): Promise<SubscriptionPlanDocument | null> {
-        if (!this.isValidObjectId(id)) {
-            throw new BadRequestException('Некорректный ID плана');
-        }
-
-        return this.subscriptionPlanModel
-            .findById(id)
-            .populate('courseId', 'title image_url teacherId price discount_percent')
-            .populate({
-                path: 'courseId',
-                populate: {
-                    path: 'teacherId',
-                    select: 'name second_name'
-                }
-            })
-            .exec();
-    }
-
-    /**
-     * Обновление плана подписки
-     */
-    async update(id: string, updateDto: UpdateSubscriptionPlanDto): Promise<SubscriptionPlanDocument> {
-        this.logger.log(`Обновление плана подписки: ${id}`);
-
-        const plan = await this.findById(id);
+    async getPlanById(id: string): Promise<SubscriptionPlanDocument> {
+        const plan = await this.planModel.findById(id).exec();
         if (!plan) {
-            throw new NotFoundException(`План подписки с ID ${id} не найден`);
+            throw new NotFoundException(`Тарифный план с ID ${id} не найден`);
+        }
+        return plan;
+    }
+
+    /**
+     * Создание индивидуального плана
+     */
+    async createCustomPlan(planData: CreatePlanDto): Promise<SubscriptionPlanDocument> {
+        // Проверяем уникальность slug
+        const existingPlan = await this.planModel.findOne({ slug: planData.slug }).exec();
+        if (existingPlan) {
+            throw new ConflictException(`План с slug "${planData.slug}" уже существует`);
         }
 
-        // Валидация при изменении типа или курса
-        if (updateDto.type === 'course' || (updateDto.courseId && plan.type === 'course')) {
-            const courseId = updateDto.courseId || plan.courseId;
+        // Проверяем уникальность названия
+        const existingName = await this.planModel.findOne({ name: planData.name }).exec();
+        if (existingName) {
+            throw new ConflictException(`План с названием "${planData.name}" уже существует`);
+        }
 
-            if (courseId) {
-                const course = await this.courseModel.findById(courseId).exec();
-                if (!course) {
-                    throw new NotFoundException(`Курс с ID ${courseId} не найден`);
-                }
-
-                // Проверяем конфликты только если меняется курс
-                if (updateDto.courseId && updateDto.courseId !== plan.courseId?.toString()) {
-                    const existingPlan = await this.subscriptionPlanModel.findOne({
-                        type: 'course',
-                        courseId: updateDto.courseId,
-                        is_active: true,
-                        _id: { $ne: id }
-                    }).exec();
-
-                    if (existingPlan) {
-                        throw new ConflictException(`План для курса ${updateDto.courseId} уже существует`);
-                    }
-                }
+        // Валидируем скидку
+        if (planData.discount_percent && planData.discount_percent > 0) {
+            if (!planData.original_price) {
+                throw new BadRequestException('Для скидочного плана необходимо указать оригинальную цену');
+            }
+            if (planData.original_price <= planData.price) {
+                throw new BadRequestException('Оригинальная цена должна быть больше текущей цены');
             }
         }
 
-        // Обновляем даты если переданы как строки
-        if (updateDto.available_from) {
-            (updateDto as any).available_from = new Date(updateDto.available_from);
-        }
-        if (updateDto.available_until) {
-            (updateDto as any).available_until = new Date(updateDto.available_until);
+        const newPlan = new this.planModel({
+            ...planData,
+            currency: planData.currency || 'UAH',
+            is_active: planData.is_active !== undefined ? planData.is_active : true,
+            subscribers_count: 0,
+            total_revenue: 0
+        });
+
+        const savedPlan = await newPlan.save();
+        this.logger.log(`✨ Создан индивидуальный план: "${savedPlan.name}"`);
+
+        return savedPlan;
+    }
+
+    /**
+     * Обновление тарифного плана
+     */
+    async updatePlan(id: string, updateData: UpdatePlanDto): Promise<SubscriptionPlanDocument> {
+        const plan = await this.planModel.findById(id).exec();
+        if (!plan) {
+            throw new NotFoundException(`Тарифный план с ID ${id} не найден`);
         }
 
-        Object.assign(plan, updateDto);
+        // Проверяем уникальность slug (если он изменяется)
+        if (updateData.slug && updateData.slug !== plan.slug) {
+            const existingSlug = await this.planModel.findOne({
+                slug: updateData.slug,
+                _id: { $ne: id }
+            }).exec();
+            if (existingSlug) {
+                throw new ConflictException(`План с slug "${updateData.slug}" уже существует`);
+            }
+        }
+
+        // Проверяем уникальность названия (если оно изменяется)
+        if (updateData.name && updateData.name !== plan.name) {
+            const existingName = await this.planModel.findOne({
+                name: updateData.name,
+                _id: { $ne: id }
+            }).exec();
+            if (existingName) {
+                throw new ConflictException(`План с названием "${updateData.name}" уже существует`);
+            }
+        }
+
+        // Валидируем скидку
+        const finalPrice = updateData.price !== undefined ? updateData.price : plan.price;
+        const finalOriginalPrice = updateData.original_price !== undefined ? updateData.original_price : plan.original_price;
+        const finalDiscountPercent = updateData.discount_percent !== undefined ? updateData.discount_percent : plan.discount_percent;
+
+        if (finalDiscountPercent && finalDiscountPercent > 0) {
+            if (!finalOriginalPrice) {
+                throw new BadRequestException('Для скидочного плана необходимо указать оригинальную цену');
+            }
+            if (finalOriginalPrice <= finalPrice) {
+                throw new BadRequestException('Оригинальная цена должна быть больше текущей цены');
+            }
+        }
+
+        // Обновляем план
+        Object.assign(plan, updateData);
         const updatedPlan = await plan.save();
 
-        this.logger.log(`План подписки обновлен: ${id}`);
-        return this.findByIdWithPopulate(updatedPlan.id);
+        this.logger.log(`📝 Обновлен план: "${updatedPlan.name}"`);
+        return updatedPlan;
     }
 
     /**
-     * Удаление плана подписки
+     * Удаление или деактивация плана
      */
-    async delete(id: string): Promise<void> {
-        this.logger.log(`Удаление плана подписки: ${id}`);
-
-        const plan = await this.findById(id);
+    async deletePlan(id: string, force: boolean = false): Promise<{ deleted: boolean }> {
+        const plan = await this.planModel.findById(id).exec();
         if (!plan) {
-            throw new NotFoundException(`План подписки с ID ${id} не найден`);
+            throw new NotFoundException(`Тарифный план с ID ${id} не найден`);
         }
 
-        // Проверяем, есть ли активные подписки
-        if (plan.current_subscriptions > 0) {
-            throw new ConflictException(
-                `Нельзя удалить план с активными подписками. Активных подписок: ${plan.current_subscriptions}`
-            );
-        }
+        // Проверяем, есть ли активные подписки на этот план
+        // TODO: Добавить проверку через SubscriptionsService когда он будет доступен
+        // const activeSubscriptions = await this.subscriptionsService.countActiveSubscriptionsByPlan(id);
+        // if (activeSubscriptions > 0 && force) {
+        //     throw new ConflictException(`Нельзя удалить план с ${activeSubscriptions} активными подписками`);
+        // }
 
-        await this.subscriptionPlanModel.findByIdAndDelete(id).exec();
-        this.logger.log(`План подписки удален: ${id}`);
-    }
-
-    /**
-     * Получение доступных планов для покупки
-     */
-    async getAvailablePlans(type?: 'course' | 'period'): Promise<SubscriptionPlanDocument[]> {
-        const query: any = {
-            is_active: true,
-            is_available: true
-        };
-
-        if (type) {
-            query.type = type;
-        }
-
-        // Фильтрация по датам доступности
-        const now = new Date();
-        query.$or = [
-            { available_from: { $exists: false } },
-            { available_from: null },
-            { available_from: { $lte: now } }
-        ];
-
-        query.$and = [
-            {
-                $or: [
-                    { available_until: { $exists: false } },
-                    { available_until: null },
-                    { available_until: { $gte: now } }
-                ]
-            }
-        ];
-
-        return this.subscriptionPlanModel
-            .find(query)
-            .populate('courseId', 'title image_url teacherId')
-            .populate({
-                path: 'courseId',
-                populate: {
-                    path: 'teacherId',
-                    select: 'name second_name'
-                }
-            })
-            .sort({ type: 1, duration_months: 1, price: 1 })
-            .exec();
-    }
-
-    /**
-     * Получение планов по курсу
-     */
-    async getPlansByCourse(courseId: string): Promise<SubscriptionPlanDocument[]> {
-        if (!this.isValidObjectId(courseId)) {
-            throw new BadRequestException('Некорректный ID курса');
-        }
-
-        return this.subscriptionPlanModel
-            .find({
-                type: 'course',
-                courseId,
-                is_active: true,
-                is_available: true
-            })
-            .populate('courseId', 'title image_url teacherId')
-            .exec();
-    }
-
-    /**
-     * Получение популярных планов
-     */
-    async getPopularPlans(limit: number = 5): Promise<SubscriptionPlanDocument[]> {
-        return this.subscriptionPlanModel
-            .find({
-                is_active: true,
-                is_available: true,
-                total_purchases: { $gt: 0 }
-            })
-            .populate('courseId', 'title image_url')
-            .sort({ total_purchases: -1, average_rating: -1 })
-            .limit(limit)
-            .exec();
-    }
-
-    /**
-     * Обновление статистики плана при покупке
-     */
-    async updatePurchaseStatistics(planId: string, amount: number): Promise<void> {
-        try {
-            await this.subscriptionPlanModel.findByIdAndUpdate(planId, {
-                $inc: {
-                    total_purchases: 1,
-                    total_revenue: amount,
-                    current_subscriptions: 1
-                }
-            }).exec();
-
-            this.logger.log(`Статистика плана ${planId} обновлена: +${amount} копеек`);
-        } catch (error) {
-            this.logger.error(`Ошибка обновления статистики плана ${planId}:`, error);
+        if (force) {
+            // Принудительное удаление
+            await this.planModel.findByIdAndDelete(id).exec();
+            this.logger.log(`🗑️ Удален план: "${plan.name}"`);
+            return { deleted: true };
+        } else {
+            // Деактивация
+            plan.is_active = false;
+            await plan.save();
+            this.logger.log(`🔒 Деактивирован план: "${plan.name}"`);
+            return { deleted: false };
         }
     }
 
     /**
-     * Обновление статистики при отмене подписки
+     * Активация/деактивация плана
      */
-    async updateCancellationStatistics(planId: string): Promise<void> {
-        try {
-            const plan = await this.subscriptionPlanModel.findById(planId).exec();
-            if (plan && plan.current_subscriptions > 0) {
-                await this.subscriptionPlanModel.findByIdAndUpdate(planId, {
-                    $inc: { current_subscriptions: -1 }
-                }).exec();
-
-                this.logger.log(`Статистика плана ${planId} обновлена: -1 активная подписка`);
-            }
-        } catch (error) {
-            this.logger.error(`Ошибка обновления статистики отмены для плана ${planId}:`, error);
+    async toggleActivation(id: string, isActive: boolean): Promise<SubscriptionPlanDocument> {
+        const plan = await this.planModel.findById(id).exec();
+        if (!plan) {
+            throw new NotFoundException(`Тарифный план с ID ${id} не найден`);
         }
+
+        plan.is_active = isActive;
+        const updatedPlan = await plan.save();
+
+        this.logger.log(`${isActive ? '✅ Активирован' : '❌ Деактивирован'} план: "${plan.name}"`);
+        return updatedPlan;
     }
 
     /**
@@ -450,142 +196,313 @@ export class SubscriptionPlansService {
         const [
             totalPlans,
             activePlans,
-            courseTypePlans,
-            periodTypePlans,
+            popularPlans,
+            featuredPlans,
+            totalSubscribers,
             totalRevenue,
-            totalSubscriptions
+            topPlans
         ] = await Promise.all([
-            this.subscriptionPlanModel.countDocuments().exec(),
-            this.subscriptionPlanModel.countDocuments({ is_active: true }).exec(),
-            this.subscriptionPlanModel.countDocuments({ type: 'course', is_active: true }).exec(),
-            this.subscriptionPlanModel.countDocuments({ type: 'period', is_active: true }).exec(),
-            this.subscriptionPlanModel.aggregate([
+            this.planModel.countDocuments().exec(),
+            this.planModel.countDocuments({ is_active: true }).exec(),
+            this.planModel.countDocuments({ is_popular: true, is_active: true }).exec(),
+            this.planModel.countDocuments({ is_featured: true, is_active: true }).exec(),
+            this.planModel.aggregate([
+                { $group: { _id: null, total: { $sum: '$subscribers_count' } } }
+            ]).exec().then(result => result[0]?.total || 0),
+            this.planModel.aggregate([
                 { $group: { _id: null, total: { $sum: '$total_revenue' } } }
             ]).exec().then(result => result[0]?.total || 0),
-            this.subscriptionPlanModel.aggregate([
-                { $group: { _id: null, total: { $sum: '$current_subscriptions' } } }
-            ]).exec().then(result => result[0]?.total || 0)
+            this.planModel
+                .find({ is_active: true })
+                .sort({ subscribers_count: -1 })
+                .limit(5)
+                .select('name subscribers_count total_revenue')
+                .exec()
         ]);
 
-        // Статистика по валютам
-        const revenueByCurrency = await this.subscriptionPlanModel.aggregate([
-            {
-                $group: {
-                    _id: '$currency',
-                    total_revenue: { $sum: '$total_revenue' },
-                    total_purchases: { $sum: '$total_purchases' },
-                    avg_price: { $avg: '$price' }
-                }
-            }
-        ]).exec();
-
-        // Топ планов по продажам
-        const topPlansByRevenue = await this.subscriptionPlanModel
-            .find({ total_revenue: { $gt: 0 } })
-            .populate('courseId', 'title')
-            .sort({ total_revenue: -1 })
-            .limit(10)
-            .select('name type total_revenue total_purchases current_subscriptions')
-            .exec();
-
         return {
-            total_plans: totalPlans,
-            active_plans: activePlans,
-            plans_by_type: {
-                course: courseTypePlans,
-                period: periodTypePlans
+            totalPlans,
+            activePlans,
+            inactivePlans: totalPlans - activePlans,
+            popularPlans,
+            featuredPlans,
+            totalSubscribers,
+            totalRevenue,
+            averageRevenuePerPlan: totalPlans > 0 ? Math.round(totalRevenue / totalPlans) : 0,
+            topPlans: topPlans.map(plan => ({
+                id: plan.id,
+                name: plan.name,
+                subscribers: plan.subscribers_count,
+                revenue: plan.total_revenue
+            }))
+        };
+    }
+
+    /**
+     * Создание базовых тарифных планов
+     */
+    async seedBasicPlans(): Promise<SubscriptionPlanDocument[]> {
+        this.logger.log('🌱 Создание базовых тарифных планов...');
+
+        const basicPlans: CreatePlanDto[] = [
+            {
+                name: 'Базовый 1 месяц',
+                slug: 'basic-1-month',
+                description: 'Доступ ко всем курсам на 1 месяц',
+                period_type: '1_month',
+                price: 500,
+                currency: 'UAH',
+                features: [
+                    'Доступ ко всем курсам',
+                    'Онлайн поддержка',
+                    'Мобильное приложение'
+                ],
+                benefits: [
+                    'Быстрый старт обучения',
+                    'Низкая стоимость входа'
+                ],
+                color: '#74C0FC',
+                icon: '📱',
+                sort_order: 1
             },
-            total_revenue: totalRevenue,
-            active_subscriptions: totalSubscriptions,
-            revenue_by_currency: revenueByCurrency.reduce((acc, item) => {
-                acc[item._id] = {
-                    total_revenue: item.total_revenue,
-                    total_purchases: item.total_purchases,
-                    average_price: Math.round(item.avg_price || 0)
-                };
-                return acc;
-            }, {}),
-            top_plans: topPlansByRevenue
-        };
+            {
+                name: 'Стандарт 3 месяца',
+                slug: 'standard-3-months',
+                description: 'Оптимальный план для серьезного обучения',
+                period_type: '3_months',
+                price: 1000,
+                original_price: 1500,
+                discount_percent: 33,
+                currency: 'UAH',
+                is_popular: true,
+                features: [
+                    'Доступ ко всем курсам',
+                    'Персональная поддержка',
+                    'Сертификаты об окончании',
+                    'Домашние задания с проверкой',
+                    'Группы в Telegram'
+                ],
+                benefits: [
+                    'Экономия 500 грн',
+                    'Достаточно времени для изучения',
+                    'Популярный выбор студентов'
+                ],
+                color: '#51CF66',
+                icon: '🎯',
+                sort_order: 2
+            },
+            {
+                name: 'Премиум 6 месяцев',
+                slug: 'premium-6-months',
+                description: 'Максимальный результат за полгода',
+                period_type: '6_months',
+                price: 2000,
+                original_price: 3000,
+                discount_percent: 33,
+                currency: 'UAH',
+                is_featured: true,
+                features: [
+                    'Доступ ко всем курсам',
+                    'Приоритетная поддержка 24/7',
+                    'Сертификаты об окончании',
+                    'Индивидуальные консультации',
+                    'Карьерная поддержка',
+                    'Доступ к закрытым вебинарам',
+                    'Скидки на дополнительные курсы'
+                ],
+                benefits: [
+                    'Экономия 1000 грн',
+                    'Индивидуальный подход',
+                    'Карьерная поддержка',
+                    'Максимальный результат'
+                ],
+                color: '#FFD43B',
+                icon: '👑',
+                sort_order: 3
+            },
+            {
+                name: 'Профессиональный 12 месяцев',
+                slug: 'professional-12-months',
+                description: 'Годовая подписка для профессионального роста',
+                period_type: '12_months',
+                price: 3500,
+                original_price: 6000,
+                discount_percent: 42,
+                currency: 'UAH',
+                features: [
+                    'Доступ ко всем курсам',
+                    'VIP поддержка',
+                    'Все сертификаты',
+                    'Личный ментор',
+                    'Помощь в трудоустройстве',
+                    'Участие в проектах',
+                    'Доступ к корпоративным курсам',
+                    'Networking с экспертами',
+                    'Скидки на конференции'
+                ],
+                benefits: [
+                    'Максимальная экономия 2500 грн',
+                    'Личный ментор',
+                    'Помощь в карьере',
+                    'Сетевые возможности',
+                    'Полное погружение'
+                ],
+                color: '#9775FA',
+                icon: '🚀',
+                sort_order: 4
+            }
+        ];
+
+        const createdPlans: SubscriptionPlanDocument[] = [];
+
+        for (const planData of basicPlans) {
+            try {
+                // Проверяем, существует ли уже план с таким slug
+                const existingPlan = await this.planModel.findOne({ slug: planData.slug }).exec();
+
+                if (existingPlan) {
+                    this.logger.warn(`📋 План "${planData.name}" уже существует, пропускаем...`);
+                    createdPlans.push(existingPlan);
+                    continue;
+                }
+
+                // Создаем новый план
+                const newPlan = new this.planModel(planData);
+                const savedPlan = await newPlan.save();
+
+                this.logger.log(`✅ Создан план: "${savedPlan.name}" - ${savedPlan.price} ${savedPlan.currency}`);
+                createdPlans.push(savedPlan);
+
+            } catch (error) {
+                this.logger.error(`❌ Ошибка создания плана "${planData.name}": ${error.message}`);
+            }
+        }
+
+        this.logger.log(`🎉 Создано ${createdPlans.length} тарифных планов`);
+        return createdPlans;
     }
 
     /**
-     * Создание плана для курса автоматически
+     * Получение всех активных планов
      */
-    async createCourseAutoplan(courseId: string, teacherId: string): Promise<SubscriptionPlanDocument> {
-        const course = await this.courseModel.findById(courseId).populate('teacherId').exec();
-        if (!course) {
-            throw new NotFoundException(`Курс с ID ${courseId} не найден`);
-        }
+    async getActivePlans(): Promise<SubscriptionPlanDocument[]> {
+        return this.planModel
+            .find({ is_active: true })
+            .sort({ sort_order: 1, price: 1 })
+            .exec();
+    }
 
-        // Проверяем права (только преподаватель курса или админ)
-        if (course.teacherId.toString() !== teacherId) {
-            throw new BadRequestException('Только автор курса может создать план подписки');
-        }
+    /**
+     * Получение плана по slug
+     */
+    async getPlanBySlug(slug: string): Promise<SubscriptionPlanDocument | null> {
+        return this.planModel.findOne({ slug, is_active: true }).exec();
+    }
 
-        // Проверяем, нет ли уже плана
-        const existingPlan = await this.subscriptionPlanModel.findOne({
-            type: 'course',
-            courseId,
-            is_active: true
+    /**
+     * Обновление статистики плана
+     */
+    async updatePlanStats(planId: string, subscribersCount: number, revenue: number): Promise<void> {
+        await this.planModel.findByIdAndUpdate(planId, {
+            $inc: {
+                subscribers_count: subscribersCount,
+                total_revenue: revenue
+            }
         }).exec();
-
-        if (existingPlan) {
-            throw new ConflictException('План подписки для этого курса уже существует');
-        }
-
-        // Создаем автоматический план (цена на основе цены курса)
-        const basePrice = course.price || 99900; // Fallback 999 грн
-        const subscriptionPrice = Math.round(basePrice * 0.8); // 80% от цены курса
-
-        const planData: CreateSubscriptionPlanDto = {
-            name: `Подписка на курс "${course.title}"`,
-            description: `Полный доступ к курсу "${course.title}" на 3 месяца`,
-            type: 'course',
-            price: subscriptionPrice,
-            currency: course.currency || 'UAH',
-            duration_months: 3,
-            courseId: courseId,
-            is_active: true,
-            is_available: true
-        };
-
-        return this.create(planData);
     }
 
     /**
-     * Проверка валидности ObjectId
+     * Получение популярных планов
      */
-    private isValidObjectId(id: string): boolean {
-        return mongoose.Types.ObjectId.isValid(id);
+    async getPopularPlans(): Promise<SubscriptionPlanDocument[]> {
+        return this.planModel
+            .find({ is_active: true, is_popular: true })
+            .sort({ sort_order: 1 })
+            .exec();
+    }
+
+    /**
+     * Получение рекомендуемых планов
+     */
+    async getFeaturedPlans(): Promise<SubscriptionPlanDocument[]> {
+        return this.planModel
+            .find({ is_active: true, is_featured: true })
+            .sort({ sort_order: 1 })
+            .exec();
+    }
+
+    /**
+     * Удаление всех планов (для тестирования)
+     */
+    async clearAllPlans(): Promise<void> {
+        await this.planModel.deleteMany({}).exec();
+        this.logger.log('🗑️ Все тарифные планы удалены');
+    }
+
+    /**
+     * Пересоздание базовых планов
+     */
+    async recreateBasicPlans(): Promise<SubscriptionPlanDocument[]> {
+        await this.clearAllPlans();
+        return this.seedBasicPlans();
+    }
+
+    /**
+     * Поиск планов по критериям
+     */
+    async searchPlans(query: {
+        name?: string;
+        period_type?: string;
+        currency?: string;
+        min_price?: number;
+        max_price?: number;
+        is_popular?: boolean;
+        is_featured?: boolean;
+    }): Promise<SubscriptionPlanDocument[]> {
+        const filter: any = { is_active: true };
+
+        if (query.name) {
+            filter.name = { $regex: query.name, $options: 'i' };
+        }
+
+        if (query.period_type) {
+            filter.period_type = query.period_type;
+        }
+
+        if (query.currency) {
+            filter.currency = query.currency;
+        }
+
+        if (query.min_price !== undefined || query.max_price !== undefined) {
+            filter.price = {};
+            if (query.min_price !== undefined) filter.price.$gte = query.min_price;
+            if (query.max_price !== undefined) filter.price.$lte = query.max_price;
+        }
+
+        if (query.is_popular !== undefined) {
+            filter.is_popular = query.is_popular;
+        }
+
+        if (query.is_featured !== undefined) {
+            filter.is_featured = query.is_featured;
+        }
+
+        return this.planModel
+            .find(filter)
+            .sort({ sort_order: 1, price: 1 })
+            .exec();
+    }
+
+    /**
+     * Получение планов по периоду
+     */
+    async getPlansByPeriod(periodType: string): Promise<SubscriptionPlanDocument[]> {
+        return this.planModel
+            .find({
+                period_type: periodType,
+                is_active: true
+            })
+            .sort({ price: 1 })
+            .exec();
     }
 }
-
-/**
- * Объяснение сервиса планов подписки:
- * 
- * 1. **ИНИЦИАЛИЗАЦИЯ:**
- *    - Создает стандартные планы при первом запуске
- *    - 3 базовых плана: месяц, квартал, год
- * 
- * 2. **CRUD ОПЕРАЦИИ:**
- *    - Создание с валидацией типов и курсов
- *    - Обновление с проверкой конфликтов
- *    - Удаление с проверкой активных подписок
- * 
- * 3. **СПЕЦИАЛЬНЫЕ МЕТОДЫ:**
- *    - getAvailablePlans() - планы доступные для покупки
- *    - getPlansByCourse() - планы конкретного курса
- *    - getPopularPlans() - популярные планы
- *    - createCourseAutoplan() - автосоздание плана для курса
- * 
- * 4. **СТАТИСТИКА:**
- *    - updatePurchaseStatistics() - обновление при покупке
- *    - updateCancellationStatistics() - обновление при отмене
- *    - getStatistics() - общая статистика
- * 
- * 5. **ВАЛИДАЦИЯ:**
- *    - Проверка существования курсов
- *    - Проверка конфликтов планов
- *    - Валидация дат доступности
- */

@@ -11,15 +11,15 @@ import { AvatarsModule } from './avatars/avatars.module';
 import { TeachersModule } from './teachers/teachers.module';
 import { CoursesModule } from './courses/courses.module';
 import { LessonsModule } from './lessons/lessons.module';
-import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { CategoriesModule } from './categories/categories.module';
 import { DifficultyLevelsModule } from './difficulty-levels/difficulty-levels.module';
 import configuration from './config/configuration';
 import { HomeworkModule } from './homework/homework.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { PaymentModule } from './payment/payment.module';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { SubscriptionPlansModule } from './subscription-plans/subscription-plans.module';
+import { PaymentModule } from './payment/payment.module';
 
 @Module({
   imports: [

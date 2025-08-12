@@ -5,8 +5,7 @@ import { Document, Schema as MongooseSchema } from 'mongoose';
 export type SubscriptionDocument = Subscription & Document;
 
 /**
- * Схема подписки пользователя
- * Содержит информацию о покупке и статусе подписки
+ * Схема подписки пользователя на курсы
  */
 @Schema({
     timestamps: true,
@@ -21,84 +20,117 @@ export type SubscriptionDocument = Subscription & Document;
     }
 })
 export class Subscription {
+    // Виртуальное поле ID
     id?: string;
 
-    // Связи
+    // Пользователь, который оформил подписку
     @Prop({
         type: MongooseSchema.Types.ObjectId,
         ref: 'User',
-        required: true
+        required: true,
     })
     userId: MongooseSchema.Types.ObjectId; // ID пользователя
 
+    // Тип подписки
     @Prop({
-        type: MongooseSchema.Types.ObjectId,
-        ref: 'SubscriptionPlan',
+        type: String,
+        enum: ['course', 'period'],
         required: true
     })
-    planId: MongooseSchema.Types.ObjectId; // ID плана подписки
+    subscription_type: 'course' | 'period'; // Тип: на отдельный курс или на период
 
-    // Даты подписки
-    @Prop({ required: true })
+    // Подписка на отдельный курс
+    @Prop({
+        type: MongooseSchema.Types.ObjectId,
+        ref: 'Course'
+    })
+    courseId?: MongooseSchema.Types.ObjectId; // ID курса (для подписки типа 'course')
+
+    // Подписка на период
+    @Prop({
+        type: String,
+        enum: ['1_month', '3_months', '6_months', '12_months'],
+        required: function () {
+            return this.subscription_type === 'period';
+        }
+    })
+    period_type?: '1_month' | '3_months' | '6_months' | '12_months'; // Тип периода
+
+    // Даты действия подписки
+    @Prop({ required: true, type: Date })
     start_date: Date; // Дата начала подписки
 
-    @Prop({ required: true })
+    @Prop({ required: true, type: Date })
     end_date: Date; // Дата окончания подписки
 
     // Статус подписки
     @Prop({
         type: String,
-        enum: ['pending', 'active', 'expired', 'cancelled', 'suspended'],
+        enum: ['active', 'expired', 'cancelled', 'pending'],
         default: 'pending'
     })
-    status: 'pending' | 'active' | 'expired' | 'cancelled' | 'suspended';
+    status: 'active' | 'expired' | 'cancelled' | 'pending';
+
+    // Финансовая информация
+    @Prop({ required: true, type: Number, min: 0 })
+    price: number; // Цена подписки
+
+    @Prop({ type: String, enum: ['USD', 'EUR', 'UAH'], default: 'USD' })
+    currency: string; // Валюта
+
+    @Prop({ type: Number, min: 0 })
+    discount_amount?: number; // Размер скидки
+
+    @Prop({ type: String })
+    discount_code?: string; // Промокод, если применялся
 
     // Информация об оплате
-    @Prop({ required: true, min: 0 })
-    paid_amount: number; // Оплаченная сумма в копейках
+    @Prop({ type: String })
+    payment_method?: string; // Способ оплаты
 
+    @Prop({ type: String })
+    payment_transaction_id?: string; // ID транзакции оплаты
+
+    @Prop({ type: Date })
+    payment_date?: Date; // Дата оплаты
+
+    @Prop({ type: Boolean, default: false })
+    is_paid: boolean; // Оплачена ли подписка
+
+    // Автоматическое продление
+    @Prop({ type: Boolean, default: false })
+    auto_renewal: boolean; // Автоматическое продление
+
+    @Prop({ type: Date })
+    next_billing_date?: Date; // Дата следующего списания
+
+    // Доступ к курсам (для периодических подписок)
     @Prop({
-        type: String,
-        enum: ['UAH', 'USD', 'EUR'],
-        default: 'UAH'
+        type: [{ type: MongooseSchema.Types.ObjectId, ref: 'Course' }],
+        default: []
     })
-    paid_currency: string; // Валюта оплаты
+    accessible_courses?: MongooseSchema.Types.ObjectId[]; // Курсы, доступные по подписке
 
-    @Prop({ type: String })
-    payment_method: string; // Способ оплаты (например, 'monobank')
+    // Прогресс обучения
+    @Prop({ type: Number, default: 0, min: 0, max: 100 })
+    progress_percentage: number; // Процент прохождения курса
 
-    @Prop({ type: String })
-    payment_transaction_id: string; // ID транзакции в платежной системе
+    @Prop({ type: Number, default: 0 })
+    completed_lessons: number; // Количество пройденных уроков
 
-    @Prop({ type: Date })
-    payment_date: Date; // Дата оплаты
-
-    // Информация о плане на момент покупки (снимок)
-    @Prop({ type: Object, required: true })
-    plan_snapshot: {
-        name: string;
-        description: string;
-        type: 'course' | 'period';
-        duration_months: number;
-        price: number;
-        currency: string;
-        discount_percent: number;
-        courseId?: string;
-        includes_all_courses?: boolean;
-        included_features?: string[];
-    };
-
-    // Автопродление
-    @Prop({ default: false })
-    auto_renewal: boolean; // Включено ли автопродление
+    @Prop({ type: Number, default: 0 })
+    total_lessons: number; // Общее количество уроков
 
     @Prop({ type: Date })
-    auto_renewal_date?: Date; // Дата следующего автоматического продления
+    last_accessed?: Date; // Дата последнего доступа
 
-    @Prop({ default: false })
-    auto_renewal_failed: boolean; // Не удалось автопродлить
+    // Дополнительные настройки
+    @Prop({ type: Boolean, default: true })
+    email_notifications: boolean; // Уведомления по email
 
-    // Отмена и приостановка
+    @Prop({ type: String })
+    cancellation_reason?: string; // Причина отмены подписки
+
     @Prop({ type: Date })
     cancelled_at?: Date; // Дата отмены
 
@@ -106,37 +138,7 @@ export class Subscription {
         type: MongooseSchema.Types.ObjectId,
         ref: 'User'
     })
-    cancelled_by?: MongooseSchema.Types.ObjectId; // Кем отменена (пользователем или админом)
-
-    @Prop({ type: String })
-    cancellation_reason?: string; // Причина отмены
-
-    @Prop({ type: Date })
-    suspended_at?: Date; // Дата приостановки
-
-    @Prop({ type: String })
-    suspension_reason?: string; // Причина приостановки
-
-    // Использование
-    @Prop({ min: 0, default: 0 })
-    usage_count: number; // Количество использований (например, просмотренных уроков)
-
-    @Prop({ type: Date })
-    last_used_at?: Date; // Последнее использование
-
-    // Уведомления
-    @Prop({ default: false })
-    expiry_notification_sent: boolean; // Отправлено ли уведомление об истечении
-
-    @Prop({ default: false })
-    renewal_notification_sent: boolean; // Отправлено ли уведомление о продлении
-
-    // Метаданные
-    @Prop({ type: Object, default: {} })
-    metadata: Record<string, any>; // Дополнительные данные
-
-    @Prop({ type: String })
-    notes?: string; // Заметки администратора
+    cancelled_by?: MongooseSchema.Types.ObjectId; // Кто отменил подписку
 
     // Системные поля
     createdAt?: Date;
@@ -145,36 +147,12 @@ export class Subscription {
 
 export const SubscriptionSchema = SchemaFactory.createForClass(Subscription);
 
-// Виртуальные поля
+// Виртуальное поле id
 SubscriptionSchema.virtual('id').get(function () {
     return this._id.toString();
 });
 
-// Виртуальное поле для проверки активности
-SubscriptionSchema.virtual('is_active').get(function () {
-    const now = new Date();
-    return this.status === 'active' &&
-        this.start_date <= now &&
-        this.end_date > now;
-});
-
-// Виртуальное поле для оставшихся дней
-SubscriptionSchema.virtual('days_remaining').get(function () {
-    if (this.status !== 'active') return 0;
-    const now = new Date();
-    const remaining = Math.ceil((this.end_date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-    return Math.max(0, remaining);
-});
-
-// Виртуальное поле для прогресса (в процентах)
-SubscriptionSchema.virtual('progress_percent').get(function () {
-    const now = new Date();
-    const total = this.end_date.getTime() - this.start_date.getTime();
-    const elapsed = now.getTime() - this.start_date.getTime();
-    return Math.min(100, Math.max(0, Math.round((elapsed / total) * 100)));
-});
-
-// Связи
+// Виртуальные поля для связей
 SubscriptionSchema.virtual('user', {
     ref: 'User',
     localField: 'userId',
@@ -182,72 +160,45 @@ SubscriptionSchema.virtual('user', {
     justOne: true
 });
 
-SubscriptionSchema.virtual('plan', {
-    ref: 'SubscriptionPlan',
-    localField: 'planId',
+SubscriptionSchema.virtual('course', {
+    ref: 'Course',
+    localField: 'courseId',
     foreignField: '_id',
     justOne: true
 });
 
-// Методы схемы
-SubscriptionSchema.methods.canAccess = function (courseId?: string): boolean {
-    if (!this.is_active) return false;
+// Виртуальные поля для вычисляемых значений
+SubscriptionSchema.virtual('is_active').get(function () {
+    const now = new Date();
+    return this.status === 'active' &&
+        this.start_date <= now &&
+        this.end_date >= now;
+});
 
-    // Если подписка на конкретный курс
-    if (this.plan_snapshot.type === 'course') {
-        return this.plan_snapshot.courseId === courseId;
-    }
+SubscriptionSchema.virtual('days_remaining').get(function () {
+    const now = new Date();
+    const timeDiff = this.end_date.getTime() - now.getTime();
+    return Math.ceil(timeDiff / (1000 * 3600 * 24));
+});
 
-    // Если подписка на все курсы
-    if (this.plan_snapshot.includes_all_courses) {
-        return true;
-    }
-
-    return false;
-};
-
-SubscriptionSchema.methods.extend = function (months: number): void {
-    const currentEndDate = new Date(this.end_date);
-    currentEndDate.setMonth(currentEndDate.getMonth() + months);
-    this.end_date = currentEndDate;
-};
-
-// Индексы
-SubscriptionSchema.index({ userId: 1, status: 1 });
-SubscriptionSchema.index({ planId: 1 });
-SubscriptionSchema.index({ status: 1, end_date: 1 });
+// Индексы для оптимизации
+SubscriptionSchema.index({ userId: 1 });
+SubscriptionSchema.index({ courseId: 1 });
+SubscriptionSchema.index({ status: 1 });
+SubscriptionSchema.index({ subscription_type: 1 });
 SubscriptionSchema.index({ start_date: 1, end_date: 1 });
-SubscriptionSchema.index({ payment_transaction_id: 1 });
-SubscriptionSchema.index({ auto_renewal_date: 1 });
+SubscriptionSchema.index({ end_date: 1 }); // Для поиска истекающих подписок
+SubscriptionSchema.index({ next_billing_date: 1 }); // Для автопродления
+SubscriptionSchema.index({ userId: 1, courseId: 1 }); // Составной индекс для быстрого поиска
 
-// Составные индексы
-SubscriptionSchema.index({ userId: 1, status: 1, end_date: -1 });
-SubscriptionSchema.index({ 'plan_snapshot.type': 1, 'plan_snapshot.courseId': 1 });
-
-/**
- * Объяснение схемы подписок:
- * 
- * 1. **СТАТУСЫ ПОДПИСКИ:**
- *    - pending - ожидает оплаты
- *    - active - активна
- *    - expired - истекла
- *    - cancelled - отменена
- *    - suspended - приостановлена
- * 
- * 2. **СНИМОК ПЛАНА:**
- *    - Сохраняется информация о плане на момент покупки
- *    - Защищает от изменений в планах после покупки
- * 
- * 3. **АВТОПРОДЛЕНИЕ:**
- *    - Возможность настроить автоматическое продление
- *    - Отслеживание неудачных попыток продления
- * 
- * 4. **ВИРТУАЛЬНЫЕ ПОЛЯ:**
- *    - is_active - проверка активности
- *    - days_remaining - оставшиеся дни
- *    - progress_percent - прогресс в процентах
- * 
- * 5. **МЕТОДЫ:**
- *    - canAccess() - проверка доступа к курсу
- *    - extend() - продление подписки
- */
+// Уникальный индекс для предотвращения дублирования активных подписок на один курс
+SubscriptionSchema.index(
+    { userId: 1, courseId: 1, status: 1 },
+    {
+        unique: true,
+        partialFilterExpression: {
+            status: { $in: ['active', 'pending'] },
+            courseId: { $ne: null }
+        }
+    }
+);

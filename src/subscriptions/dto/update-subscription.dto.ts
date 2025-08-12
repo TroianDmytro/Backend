@@ -1,26 +1,29 @@
 // src/subscriptions/dto/update-subscription.dto.ts
 import {
-    IsOptional,
-    IsEnum,
     IsString,
+    IsNumber,
+    IsOptional,
     IsBoolean,
-    IsDateString
+    IsEnum,
+    Min,
+    IsDateString,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+
 
 export class UpdateSubscriptionDto {
     @ApiProperty({
         example: 'active',
         description: 'Статус подписки',
-        enum: ['pending', 'active', 'expired', 'cancelled', 'suspended'],
+        enum: ['active', 'expired', 'cancelled', 'pending'],
         required: false
     })
-    @IsEnum(['pending', 'active', 'expired', 'cancelled', 'suspended'])
+    @IsEnum(['active', 'expired', 'cancelled', 'pending'])
     @IsOptional()
-    status?: 'pending' | 'active' | 'expired' | 'cancelled' | 'suspended';
+    status?: 'active' | 'expired' | 'cancelled' | 'pending';
 
     @ApiProperty({
-        example: '2024-12-31T23:59:59Z',
+        example: '2024-07-15T00:00:00Z',
         description: 'Новая дата окончания подписки',
         required: false
     })
@@ -29,8 +32,45 @@ export class UpdateSubscriptionDto {
     end_date?: string;
 
     @ApiProperty({
+        example: 399.99,
+        description: 'Новая цена подписки',
+        required: false
+    })
+    @IsNumber()
+    @Min(0)
+    @IsOptional()
+    price?: number;
+
+    @ApiProperty({
         example: true,
-        description: 'Включить автопродление',
+        description: 'Оплачена ли подписка',
+        required: false
+    })
+    @IsBoolean()
+    @IsOptional()
+    is_paid?: boolean;
+
+    @ApiProperty({
+        example: 'TXN123456789',
+        description: 'ID транзакции оплаты',
+        required: false
+    })
+    @IsString()
+    @IsOptional()
+    payment_transaction_id?: string;
+
+    @ApiProperty({
+        example: '2024-01-15T10:30:00Z',
+        description: 'Дата оплаты',
+        required: false
+    })
+    @IsDateString()
+    @IsOptional()
+    payment_date?: string;
+
+    @ApiProperty({
+        example: false,
+        description: 'Автоматическое продление',
         required: false
     })
     @IsBoolean()
@@ -38,26 +78,46 @@ export class UpdateSubscriptionDto {
     auto_renewal?: boolean;
 
     @ApiProperty({
-        example: 'Продлено администратором',
-        description: 'Заметки администратора',
+        example: '2024-04-15T00:00:00Z',
+        description: 'Дата следующего списания',
         required: false
     })
-    @IsString()
+    @IsDateString()
     @IsOptional()
-    notes?: string;
+    next_billing_date?: string;
 
     @ApiProperty({
-        example: 'Нарушение правил пользования',
-        description: 'Причина приостановки (для статуса suspended)',
+        example: 75,
+        description: 'Процент прохождения курса',
         required: false
     })
-    @IsString()
+    @IsNumber()
+    @Min(0)
     @IsOptional()
-    suspension_reason?: string;
+    progress_percentage?: number;
 
     @ApiProperty({
-        example: 'По просьбе пользователя',
-        description: 'Причина отмены (для статуса cancelled)',
+        example: 8,
+        description: 'Количество пройденных уроков',
+        required: false
+    })
+    @IsNumber()
+    @Min(0)
+    @IsOptional()
+    completed_lessons?: number;
+
+    @ApiProperty({
+        example: false,
+        description: 'Уведомления по email',
+        required: false
+    })
+    @IsBoolean()
+    @IsOptional()
+    email_notifications?: boolean;
+
+    @ApiProperty({
+        example: 'Не подходит формат обучения',
+        description: 'Причина отмены подписки',
         required: false
     })
     @IsString()

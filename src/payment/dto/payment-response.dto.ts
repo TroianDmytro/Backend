@@ -1,80 +1,56 @@
-// src/payment/dto/payment-response.dto.ts
+//  src/payment/dto/payment-response.dto.ts
 import { ApiProperty } from '@nestjs/swagger';
 
 export class PaymentResponseDto {
     @ApiProperty({ example: '507f1f77bcf86cd799439011', description: 'ID платежа' })
     id: string;
 
-    @ApiProperty({
-        example: {
-            id: '507f1f77bcf86cd799439012',
-            email: 'user@example.com',
-            name: 'Иван Иванов'
-        },
-        description: 'Информация о пользователе'
-    })
-    user: {
-        id: string;
-        email: string;
-        name?: string;
-    };
+    @ApiProperty({ example: 'p2_9ZgpZVKFqktfn', description: 'ID инвойса в Monobank' })
+    invoiceId: string;
 
-    @ApiProperty({
-        example: {
-            id: '507f1f77bcf86cd799439013',
-            name: 'Подписка на курс JavaScript',
-            type: 'course'
-        },
-        description: 'Информация о плане'
-    })
-    plan: {
-        id: string;
-        name: string;
-        type: 'course' | 'period';
-    };
+    @ApiProperty({ example: '507f1f77bcf86cd799439012', description: 'ID подписки' })
+    subscriptionId: string;
 
-    @ApiProperty({ example: 99900, description: 'Сумма в копейках' })
+    @ApiProperty({ example: '507f1f77bcf86cd799439013', description: 'ID пользователя' })
+    userId: string;
+
+    @ApiProperty({ example: 29999, description: 'Сумма в копейках' })
     amount: number;
-
-    @ApiProperty({ example: 9990, description: 'Размер скидки в копейках' })
-    discount_amount: number;
-
-    @ApiProperty({ example: 89910, description: 'Итоговая сумма к оплате' })
-    final_amount: number;
 
     @ApiProperty({ example: 'UAH', description: 'Валюта' })
     currency: string;
 
-    @ApiProperty({ example: 'pending', description: 'Статус платежа' })
-    status: 'created' | 'pending' | 'processing' | 'success' | 'failed' | 'cancelled' | 'refunded';
+    @ApiProperty({
+        example: 'success',
+        description: 'Статус платежа',
+        enum: ['created', 'processing', 'hold', 'success', 'failure', 'reversed', 'expired']
+    })
+    status: string;
 
-    @ApiProperty({ example: 'https://pay.mbnk.biz/p/abc123', description: 'Ссылка на оплату' })
-    payment_url?: string;
+    @ApiProperty({ example: 'Успешно оплачен', description: 'Описание статуса' })
+    statusDescription: string;
 
-    @ApiProperty({ example: '2024-01-15T11:30:00Z', description: 'Срок действия ссылки' })
-    payment_link_expires_at?: Date;
+    @ApiProperty({
+        example: 'https://pay.mbnk.biz/p2_9ZgpZVKFqktfn',
+        description: 'URL страницы оплаты'
+    })
+    pageUrl?: string;
 
-    @ApiProperty({ example: 15, description: 'Минут до истечения ссылки' })
-    link_expires_in_minutes: number;
+    @ApiProperty({ example: 'Оплата подписки на курс', description: 'Описание платежа' })
+    description: string;
 
-    @ApiProperty({ example: 'inv_abc123def456', description: 'ID инвойса Monobank' })
-    monobank_invoice_id?: string;
+    @ApiProperty({ example: '220524A27D4A', description: 'Референс транзакции' })
+    reference?: string;
 
-    @ApiProperty({ example: 'txn_789xyz123', description: 'ID транзакции Monobank' })
-    monobank_transaction_id?: string;
+    @ApiProperty({ example: '123456', description: 'Код авторизации' })
+    approvalCode?: string;
 
-    @ApiProperty({ example: '2024-01-15T10:45:00Z', description: 'Дата оплаты' })
-    paid_at?: Date;
-
-    @ApiProperty({ example: 'Insufficient funds', description: 'Причина неудачи' })
-    failure_reason?: string;
-
-    @ApiProperty({ example: 1, description: 'Номер попытки оплаты' })
-    attempt_number: number;
+    @ApiProperty({ example: '123456789012', description: 'RRN транзакции' })
+    rrn?: string;
 
     @ApiProperty({ example: '2024-01-15T10:30:00Z', description: 'Дата создания' })
     createdAt: Date;
 
-    @ApiProperty({ example: '2024-01-15T10:45:00Z', description: 'Дата обновления' })
-    updatedAt: Date;
+    @ApiProperty({ example: '2024-01-15T10:35:00Z', description: 'Дата оплаты' })
+    paidAt?: Date;
 }
