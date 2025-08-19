@@ -108,8 +108,8 @@ export class SubscriptionsController {
         @Query() filters: SubscriptionFilterDto,
         @Request() req?
     ) {
-        const currentUserId = 'temp-user-id'; // Временно для работы без JWT
-        const isAdmin = true; // Временно для работы без JWT
+        // const currentUserId = 'temp-user-id'; // Временно для работы без JWT
+        // const isAdmin = true; // Временно для работы без JWT
 
         this.logger.log(`Запрос списка подписок. Страница: ${page}, Лимит: ${limit}`);
 
