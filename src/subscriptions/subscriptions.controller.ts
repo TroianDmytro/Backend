@@ -51,7 +51,7 @@ export class SubscriptionsController {
      */
     @Post()
     @UseGuards(RolesGuard)
-    @Roles('admin', 'user')
+    @Roles('user')
     @ApiOperation({
         summary: 'Создание новой подписки',
         description: 'Создает подписку на курс или на определенный период'

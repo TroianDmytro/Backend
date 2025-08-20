@@ -17,7 +17,7 @@ export default () => ({
     },
     // Настройки Monobank
     monobank: {
-        token: process.env.MONOBANK_TOKEN || 'test-token',
+        token: process.env.MONOBANK_TOKEN || 'ura1drIjryK6dOHTd3T0e-LCfAyvSUxUsXE2IrgpT9co',
         webhookUrl: process.env.MONOBANK_WEBHOOK_URL || `${process.env.APP_URL || 'https://neuronest.pp.ua'}/api/payments/webhook`,
         isTestMode: process.env.MONOBANK_TEST_MODE === 'true' || true, // по умолчанию тестовый режим
          baseUrl: process.env.MONOBANK_BASE_URL || 'https://api.monobank.ua/api/merchant',
