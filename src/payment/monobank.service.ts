@@ -10,12 +10,7 @@ import * as crypto from 'crypto';
 interface CreateInvoiceRequest {
     amount: number; // сума в мінімальних одиницях валюти (копійки для гривні)
     ccy?: number; // код валюти (980 - UAH, 840 - USD, 978 - EUR)
-    merchantPaymInfo?: {  // призначення платежу
-        reference?: string;
-        destination?: string;
-        comment?: string;
-        customerEmails?: string[];
-    };
+    merchantPaymInfo?: string; // призначення платежу
     redirectUrl?: string; // адреса для редіректу
     webHookUrl?: string; // адреса для отримання колбеків
     validity?: number; // строк дії в секундах (за замовчуванням 24 години)
@@ -83,11 +78,7 @@ export class MonobankService {
             const requestData: CreateInvoiceRequest = {
                 amount: amountInMinorUnits,
                 ccy: currencyCode,
-                merchantPaymInfo: {
-                    reference: params.subscriptionId,
-                    destination: params.description,
-                    comment: params.description
-                },
+                merchantPaymInfo: params.description,
                 redirectUrl: params.redirectUrl || `${this.configService.get('app.frontendUrl')}/payment/success`,
                 webHookUrl: this.webHookUrl,
                 validity: 3600, // 1 час
