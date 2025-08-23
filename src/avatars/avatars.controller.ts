@@ -72,12 +72,12 @@ export class AvatarsController {
     @Request() req
   ) {
     // Проверяем права доступа
-    const isAdmin = req.user.roles && req.user.roles.includes('admin');
-    const isOwner = userId === req.user.userId;
+    // const isAdmin = req.user.roles && req.user.roles.includes('admin');
+    // const isOwner = userId === req.user.userId;
 
-    if (!isAdmin && !isOwner) {
-      throw new BadRequestException('У вас нет прав на просмотр аватара этого пользователя');
-    }
+    // if (!isAdmin && !isOwner) {
+    //   throw new BadRequestException('У вас нет прав на просмотр аватара этого пользователя');
+    // }
 
     this.logger.log(`Пользователь ${req.user.email} запрашивает аватар для пользователя ${userId}`);
 

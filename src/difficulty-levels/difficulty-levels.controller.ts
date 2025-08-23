@@ -32,7 +32,6 @@ import { DifficultyLevelWithCoursesDto } from './dto/difficulty-level-with-cours
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { Public } from 'src/auth/decorators/public.decorator';
 
 @ApiTags('difficulty-levels')
 @Controller('difficulty-levels')
@@ -75,7 +74,6 @@ export class DifficultyLevelsController {
      * GET /difficulty-levels - Получение всех уровней сложности
      */
     @Get()
-    @Public()
     @ApiOperation({
         summary: 'Получение всех уровней сложности',
         description: 'Возвращает список всех активных уровней сложности, отсортированных по уровню'
@@ -108,7 +106,6 @@ export class DifficultyLevelsController {
      * GET /difficulty-levels/:id - Получение уровня сложности по ID
      */
     @Get(':id')
-    @Public()
     @ApiOperation({
         summary: 'Получение уровня сложности по ID',
         description: 'Возвращает подробную информацию об уровне сложности'
@@ -135,7 +132,6 @@ export class DifficultyLevelsController {
      * GET /difficulty-levels/code/:code - Получение уровня сложности по коду
      */
     @Get('code/:code')
-    @Public()
     @ApiOperation({
         summary: 'Получение уровня сложности по коду',
         description: 'Возвращает подробную информацию об уровне сложности по его коду'
@@ -222,7 +218,6 @@ export class DifficultyLevelsController {
      * GET /difficulty-levels/:id/courses - Получение курсов уровня сложности (карточки)
      */
     @Get(':id/courses')
-    @Public()
     @ApiOperation({
         summary: 'Получение курсов уровня сложности',
         description: 'Возвращает список курсов данного уровня сложности с краткой информацией для карточек'
@@ -279,7 +274,6 @@ export class DifficultyLevelsController {
      * GET /difficulty-levels/:id/courses/detailed - Получение курсов с полной информацией
      */
     @Get(':id/courses/detailed')
-    @Public()
     @ApiOperation({
         summary: 'Получение курсов с полной информацией',
         description: 'Возвращает список курсов уровня сложности с полной информацией для пользователей'

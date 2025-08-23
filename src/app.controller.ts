@@ -1,7 +1,6 @@
 import { Controller, Get, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AppService } from './app.service';
-import { Public } from './auth/decorators/public.decorator';
 
 @ApiTags('app') // Группировка в Swagger
 @Controller() // Базовый контроллер без префикса
@@ -9,7 +8,6 @@ export class AppController {
   constructor(private readonly appService: AppService) { }
 
   @Get()
-  @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Проверка работоспособности API',
@@ -28,7 +26,6 @@ export class AppController {
   }
 
   @Get('health')
-  @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Health check endpoint',

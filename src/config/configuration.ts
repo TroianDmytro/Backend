@@ -11,9 +11,9 @@ export default () => ({
     },
     // конфигурацию для Google OAuth
     google: {
-        // clientId: process.env.GOOGLE_CLIENT_ID || '254445727557-kq6503r77n1427cpv57notcnhaqkjkni.apps.googleusercontent.com',
-        // clientSecret: process.env.GOOGLE_CLIENT_SECRET || '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',
-        // callbackUrl: process.env.GOOGLE_CALLBACK_URL || `${process.env.APP_URL || 'https://neuronest.pp.ua'}/api/auth/google/callback`
+        clientId: process.env.GOOGLE_CLIENT_ID || '1234567890-abcdefghijklmnopqrstuvwxyz.apps.googleusercontent.com',
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET || '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4v5',
+        callbackUrl: process.env.GOOGLE_CALLBACK_URL || `${process.env.APP_URL || 'https://neuronest.pp.ua'}/api/auth/google/callback`
     },
     // Настройки Monobank
     monobank: {
