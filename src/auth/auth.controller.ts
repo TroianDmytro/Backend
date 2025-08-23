@@ -8,6 +8,7 @@ import { LoginUserDto } from '../users/dto/login-user.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { ConfigService } from '@nestjs/config';
+import { Public } from './decorators/public.decorator';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -21,6 +22,7 @@ export class AuthController {
         * GET /auth/google - С ОТЛАДКОЙ
         */
     @Get('google')
+    @Public()
     @UseGuards(GoogleAuthGuard)
     @ApiOperation({
         summary: 'Авторизация через Google - начало процесса',
@@ -38,10 +40,10 @@ export class AuthController {
         // Passport автоматически перенаправит на Google
     }
 
-    /**
-     * GET /auth/test/config - ТЕСТОВЫЙ эндпоинт для проверки конфигурации
-     */
+
+    // GET /auth/test/config - ТЕСТОВЫЙ эндпоинт для проверки конфигурации
     @Get('test/config')
+    @Public()
     @ApiOperation({
         summary: 'Тестовый эндпоинт для проверки конфигурации Google OAuth',
         description: 'Возвращает текущую конфигурацию (без секретов)'
@@ -62,10 +64,10 @@ export class AuthController {
         };
     }
 
-    /**
-         * GET /auth/test - Тестовая HTML страница для Google OAuth
-         */
+
+    // GET /auth/test - Тестовая HTML страница для Google OAuth
     @Get('test')
+    @Public()
     @ApiOperation({
         summary: 'Тестовая страница для Google OAuth',
         description: 'HTML страница с кнопкой для тестирования Google OAuth'
@@ -168,6 +170,7 @@ export class AuthController {
       * GET /auth/google/callback - ИСПРАВЛЕННЫЙ callback для локальной разработки
       */
     @Get('google/callback')
+    @Public()
     @UseGuards(GoogleAuthGuard)
     @ApiOperation({
         summary: 'Callback Google OAuth',
@@ -187,16 +190,18 @@ export class AuthController {
             const tokenData = await this.authService.generateGoogleJWT(req.user);
             console.log(`✅ JWT токен сгенерирован для: ${req.user.email}`);
 
-            // Для локальной разработки показываем результат на HTML странице
-            const isLocal = process.env.NODE_ENV !== 'production';
-
-            if (isLocal) {
-                // Показываем успешную страницу с токеном (для разработки)
+            // Проверяем переменную окружения для отладочного режима
+            const showDebugPage = process.env.GOOGLE_AUTH_DEBUG === 'true';
+            const frontendUrl = this.configService.get<string>('app.frontendUrl');
+            
+            if (showDebugPage) {
+                // Показываем отладочную страницу с токеном
+                console.log('🔧 Показываем отладочную страницу');
                 return res.send(this.getGoogleSuccessPage(tokenData.access_token, tokenData.user));
             } else {
-                // В production перенаправляем на фронтенд
-                const frontendUrl = this.configService.get<string>('app.frontendUrl') || 'https://neuronest.pp.ua';
-                const redirectUrl = `${frontendUrl}/auth/google/success?token=${tokenData.access_token}&user=${encodeURIComponent(JSON.stringify(tokenData.user))}`;
+                // Перенаправляем на фронтенд
+                console.log(`🚀 Перенаправляем на фронтенд: ${frontendUrl}`);
+                const redirectUrl = `${frontendUrl}?token=${tokenData.access_token}&user=${encodeURIComponent(JSON.stringify(tokenData.user))}`;
                 return res.redirect(redirectUrl);
             }
 
@@ -223,6 +228,7 @@ export class AuthController {
      * Позволяет авторизованному пользователю связать свой аккаунт с Google
      */
     @Post('google/link')
+    @Public()
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @ApiOperation({
@@ -256,6 +262,7 @@ export class AuthController {
      * Отвязывает Google аккаунт от текущего пользователя
      */
     @Post('google/unlink')
+    @Public()
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @ApiOperation({
@@ -288,6 +295,7 @@ export class AuthController {
      * Показывает, связан ли Google аккаунт с текущим пользователем
      */
     @Get('google/status')
+    @Public()
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @ApiOperation({
@@ -529,6 +537,7 @@ export class AuthController {
     }
 
     @Post('register/send-code')
+    @Public()
     @ApiOperation({
         summary: 'Шаг 1: Отправка кода подтверждения на email',
         description: 'Пользователь вводит только email, получает 6-значный код подтверждения'
@@ -543,6 +552,7 @@ export class AuthController {
     }
 
     @Post('register/verify-code')
+    @Public()
     @ApiOperation({
         summary: 'Шаг 2: Подтверждение кода и завершение регистрации',
         description: 'Пользователь вводит код, дополнительные данные и получает логин/пароль на email'
@@ -559,6 +569,7 @@ export class AuthController {
     }
 
     @Post('login')
+    @Public()
     @ApiOperation({
         summary: 'Авторизация пользователя по логину и паролю',
         description: 'Теперь используется логин вместо email'
@@ -572,6 +583,7 @@ export class AuthController {
     }
 
     @Post('resend-code')
+    @Public()
     @ApiOperation({
         summary: 'Повторная отправка кода подтверждения',
         description: 'Отправляет новый 6-значный код на email'
@@ -609,6 +621,7 @@ export class AuthController {
 
     // Старый эндпоинт для верификации по токену (для обратной совместимости)
     @Get('verify-email')
+    @Public()
     @ApiOperation({ summary: 'Подтверждение email по токену (устаревший метод)' })
     @ApiResponse({ status: 200, description: 'Email успешно подтвержден' })
     @ApiResponse({ status: 404, description: 'Неверный или устаревший токен' })
@@ -630,6 +643,7 @@ export class AuthController {
     }
 
     @Post('forgot-password')
+    @Public()
     @ApiOperation({ summary: 'Запрос на восстановление пароля' })
     @ApiResponse({ status: 200, description: 'Код восстановления отправлен на email' })
     @ApiResponse({ status: 404, description: 'Пользователь не найден' })
@@ -661,6 +675,7 @@ export class AuthController {
     }
 
     @Post('reset-password')
+    @Public()
     @ApiOperation({ summary: 'Сброс пароля с использованием кода' })
     @ApiResponse({ status: 200, description: 'Пароль успешно изменен' })
     @ApiResponse({ status: 400, description: 'Недействительный или просроченный код' })
