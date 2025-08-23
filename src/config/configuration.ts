@@ -11,13 +11,13 @@ export default () => ({
     },
     // конфигурацию для Google OAuth
     google: {
-        clientId: process.env.GOOGLE_CLIENT_ID || '1234567890-abcdefghijklmnopqrstuvwxyz.apps.googleusercontent.com',
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET || '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4v5',
+        clientId: process.env.GOOGLE_CLIENT_ID || '254445727557-kq6503r77n1427cpv57notcnhaqkjkni.apps.googleusercontent.com',
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET || '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',
         callbackUrl: process.env.GOOGLE_CALLBACK_URL || `${process.env.APP_URL || 'https://neuronest.pp.ua'}/api/auth/google/callback`
     },
     // Настройки Monobank
     monobank: {
-        token: process.env.MONOBANK_TOKEN || 'test-token',
+        token: process.env.MONOBANK_TOKEN || 'ura1drIjryK6dOHTd3T0e-LCfAyvSUxUsXE2IrgpT9co',
         webhookUrl: process.env.MONOBANK_WEBHOOK_URL || `${process.env.APP_URL || 'https://neuronest.pp.ua'}/api/payments/webhook`,
         isTestMode: process.env.MONOBANK_TEST_MODE === 'true' || true, // по умолчанию тестовый режим
          baseUrl: process.env.MONOBANK_BASE_URL || 'https://api.monobank.ua/api/merchant',

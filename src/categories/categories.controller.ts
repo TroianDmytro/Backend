@@ -31,6 +31,7 @@ import { CategoryWithCoursesDto } from './dto/category-with-courses.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { Public } from 'src/auth/decorators/public.decorator';
 
 @ApiTags('categories')
 @Controller('categories')
@@ -72,6 +73,7 @@ export class CategoriesController {
      * GET /categories - Получение списка категорий
      */
     @Get()
+    @Public()
     @ApiOperation({
         summary: 'Получение списка категорий',
         description: 'Возвращает список всех категорий с возможностью фильтрации'
@@ -111,6 +113,7 @@ export class CategoriesController {
      * GET /categories/tree - Получение дерева категорий
      */
     @Get('tree')
+    @Public()
     @ApiOperation({
         summary: 'Получение дерева категорий',
         description: 'Возвращает иерархическую структуру категорий'
@@ -133,6 +136,7 @@ export class CategoriesController {
      * GET /categories/featured - Получение рекомендуемых категорий
      */
     @Get('featured')
+    @Public()
     @ApiOperation({
         summary: 'Получение рекомендуемых категорий',
         description: 'Возвращает список рекомендуемых категорий'
@@ -165,6 +169,7 @@ export class CategoriesController {
      * GET /categories/:id - Получение категории по ID
      */
     @Get(':id')
+    @Public()
     @ApiOperation({
         summary: 'Получение категории по ID',
         description: 'Возвращает подробную информацию о категории'
@@ -191,6 +196,7 @@ export class CategoriesController {
      * GET /categories/slug/:slug - Получение категории по slug
      */
     @Get('slug/:slug')
+    @Public()
     @ApiOperation({
         summary: 'Получение категории по slug',
         description: 'Возвращает подробную информацию о категории по её slug'
@@ -276,6 +282,7 @@ export class CategoriesController {
      * GET /categories/:id/courses - Получение курсов в категории (карточки)
      */
     @Get(':id/courses')
+    @Public()
     @ApiOperation({
         summary: 'Получение курсов в категории',
         description: 'Возвращает список курсов в категории с краткой информацией для карточек'
@@ -329,6 +336,7 @@ export class CategoriesController {
      * GET /categories/:id/courses/detailed - Получение курсов с полной информацией (для пользователей)
      */
     @Get(':id/courses/detailed')
+    @Public()
     @ApiOperation({
         summary: 'Получение курсов с полной информацией',
         description: 'Возвращает список курсов в категории с полной информацией для пользователей (без админских данных)'

@@ -12,7 +12,6 @@ import {
     Request,
     Logger,
     NotFoundException,
-    BadRequestException
 } from '@nestjs/common';
 import {
     ApiTags,
@@ -21,20 +20,26 @@ import {
     ApiBearerAuth,
     ApiParam,
     ApiQuery,
-    ApiBody
 } from '@nestjs/swagger';
 import { LessonsService } from './lessons.service';
 import { CreateLessonDto } from './dto/create-lesson.dto';
 import { UpdateLessonDto } from './dto/update-lesson.dto';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { Roles } from 'src/auth/decorators/roles.decorator';
 
 @ApiTags('lessons')
 @Controller('lessons')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 export class LessonsController {
     private readonly logger = new Logger(LessonsController.name);
 
     constructor(private readonly lessonsService: LessonsService) { }
 
     @Post()
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin')
     @ApiOperation({
         summary: 'Создание нового урока',
         description: 'Создает новый урок и добавляет его к определенному курсу'
@@ -60,6 +65,8 @@ export class LessonsController {
     }
 
     @Get('course/:courseId')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin', 'user')
     @ApiOperation({
         summary: 'Получение всех уроков курса',
         description: 'Возвращает список всех уроков курса в правильном порядке'
@@ -94,6 +101,8 @@ export class LessonsController {
     }
 
     @Get(':id')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin', 'user')
     @ApiOperation({
         summary: 'Получение урока по ID',
         description: 'Возвращает подробную информацию об уроке'
@@ -113,6 +122,8 @@ export class LessonsController {
     }
 
     @Put(':id')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin')
     @ApiOperation({
         summary: 'Обновление урока',
         description: 'Обновляет данные урока. Преподаватель может редактировать только уроки своих курсов.'
@@ -140,6 +151,8 @@ export class LessonsController {
     }
 
     @Delete(':id')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin')
     @ApiOperation({
         summary: 'Удаление урока',
         description: 'Удаляет урок и все связанные с ним домашние задания'
@@ -164,6 +177,8 @@ export class LessonsController {
     }
 
     @Post(':id/publish')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin')
     @ApiOperation({
         summary: 'Публикация или снятие с публикации урока',
         description: 'Изменяет статус публикации урока'
@@ -192,6 +207,8 @@ export class LessonsController {
     }
 
     @Get(':id/next')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin', 'user')
     @ApiOperation({
         summary: 'Получение следующего урока в курсе',
         description: 'Возвращает следующий урок в порядке изучения'
@@ -217,6 +234,8 @@ export class LessonsController {
     }
 
     @Get(':id/previous')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin', 'user')
     @ApiOperation({
         summary: 'Получение предыдущего урока в курсе',
         description: 'Возвращает предыдущий урок в порядке изучения'

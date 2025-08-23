@@ -20,7 +20,8 @@ import { AppService } from './app.service';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { SubscriptionPlansModule } from './subscription-plans/subscription-plans.module';
 import { PaymentModule } from './payment/payment.module';
-
+import { APP_GUARD, Reflector } from '@nestjs/core';
+import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 @Module({
   imports: [
     // Подключаем конфигурацию из файла configuration.ts
@@ -80,7 +81,10 @@ import { PaymentModule } from './payment/payment.module';
     PaymentModule, // Добавить этот модуль
   ],
   controllers: [AppController, AvatarsController],
-  providers: [AppService],
+  providers: [AppService,
+     Reflector,
+    { provide: APP_GUARD, useClass: JwtAuthGuard }, 
+  ],
 })
 export class AppModule { }
 
