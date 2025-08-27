@@ -559,9 +559,9 @@ export class UsersService {
             }
         } else {
             // Если email не менялся, обновляем остальные поля
-            if (updateUserDto.password) {
-                user.password = await bcrypt.hash(updateUserDto.password, 10);
-            }
+            // if (updateUserDto.password) {
+            //     user.password = await bcrypt.hash(updateUserDto.password, 10);
+            // }
 
             if (updateUserDto.name !== undefined) user.name = updateUserDto.name;
             if (updateUserDto.second_name !== undefined) user.second_name = updateUserDto.second_name;
@@ -641,4 +641,6 @@ export class UsersService {
             resetPasswordExpires: null
         });
     }
+
+    
 }

@@ -40,9 +40,9 @@ export class UpdateUserDto {
     @IsString()
     telefon_number?: string;
 
-    @ApiProperty({ example: 'password123', description: 'Новый пароль', required: false })
-    @IsOptional()
-    @IsString()
-    @MinLength(6)
-    password?: string;
+    // @ApiProperty({ example: 'password123', description: 'Новый пароль', required: false })
+    // @IsOptional()
+    // @IsString()
+    // @MinLength(6)
+    // password?: string;
 }
