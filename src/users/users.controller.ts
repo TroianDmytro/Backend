@@ -38,7 +38,7 @@ export class UsersController {
 
     @Get(':id')
     @UseGuards(RolesGuard)
-    @Roles('admin')
+    @Roles('admin', 'user')
     @ApiOperation({ summary: 'Получение профиля пользователя по ID ' })
     @ApiResponse({ status: 200, description: 'Профиль пользователя' })
     @ApiResponse({ status: 401, description: 'Не авторизован' })
@@ -46,11 +46,20 @@ export class UsersController {
     @ApiResponse({ status: 404, description: 'Пользователь не найден' })
     @ApiParam({ name: 'id', description: 'ID пользователя' })
     async getUserById(@Param('id') id: string) {
-        this.logger.log(`Админ запрашивает профиль пользователя с ID: ${id}`);
+        let user: any = null;
+        try {
+            this.logger.log(`Запрос профиля пользователя с ID: ${id}`);
+            user = await this.usersService.findById(id);
 
-        const user = await this.usersService.findById(id);
-        if (!user) {
-            throw new NotFoundException('Пользователь не найден');
+        }
+        catch (error) {
+            this.logger.error(`Ошибка при получении профиля пользователя с ID: ${id}`, error.stack);
+            if (!user) {
+                throw new NotFoundException('Пользователь не найден');
+            }
+            else {
+                throw error;
+            }
         }
 
         return {
