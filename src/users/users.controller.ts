@@ -13,7 +13,8 @@ import {
     Patch,
     Post,
     HttpException,
-    InternalServerErrorException
+    InternalServerErrorException,
+    BadRequestException
 } from '@nestjs/common';
 import {
     ApiTags,
@@ -289,6 +290,227 @@ export class UsersController {
         } catch (error) {
             this.logger.error('Ошибка при получении списка пользователей', error.stack);
             throw new InternalServerErrorException('Произошла ошибка при получении списка пользователей');
+        }
+    }
+
+    @Post(':id/confirm-email-change')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin', 'user')
+    @ApiOperation({ summary: 'Подтверждение изменения email с помощью кода' })
+    @ApiResponse({
+        status: 200,
+        description: 'Email успешно изменен',
+        type: UpdateUserResponseDto
+    })
+    @ApiResponse({ status: 400, description: 'Неверный код или просроченный запрос' })
+    @ApiResponse({ status: 401, description: 'Не авторизован' })
+    @ApiResponse({ status: 403, description: 'Нет прав доступа' })
+    @ApiParam({
+        name: 'id',
+        description: 'ID пользователя',
+        example: '507f1f77bcf86cd799439011'
+    })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                code: {
+                    type: 'string',
+                    example: '123456',
+                    description: '6-значный код подтверждения'
+                }
+            },
+            required: ['code']
+        }
+    })
+    async confirmEmailChange(
+        @Param('id') id: string,
+        @Request() req,
+        @Body('code') code: string
+    ): Promise<UpdateUserResponseDto> {
+        try {
+            // Проверяем права доступа
+            const currentUserId = req.user.userId;
+            const isAdmin = req.user.roles && req.user.roles.includes('admin');
+
+            if (id !== currentUserId && !isAdmin) {
+                throw new ForbiddenException('У вас нет прав на подтверждение изменения email другого пользователя');
+            }
+
+            if (!code) {
+                throw new BadRequestException('Код подтверждения обязателен');
+            }
+
+            this.logger.log(`Подтверждение изменения email для пользователя: ${id}`);
+
+            const updatedUser = await this.usersService.confirmEmailChange(id, code);
+
+            return new UpdateUserResponseDto('Email успешно изменен', updatedUser);
+
+        } catch (error) {
+            if (error instanceof HttpException) {
+                throw error;
+            }
+
+            this.logger.error(`Ошибка при подтверждении изменения email для пользователя ${id}:`, error.stack);
+            throw new InternalServerErrorException('Произошла ошибка при подтверждении изменения email');
+        }
+    }
+
+    @Post(':id/resend-email-change-code')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin', 'user')
+    @ApiOperation({ summary: 'Повторная отправка кода для изменения email' })
+    @ApiResponse({
+        status: 200,
+        description: 'Код повторно отправлен'
+    })
+    @ApiResponse({ status: 400, description: 'Нет активного запроса на изменение email' })
+    @ApiResponse({ status: 401, description: 'Не авторизован' })
+    @ApiResponse({ status: 403, description: 'Нет прав доступа' })
+    @ApiParam({
+        name: 'id',
+        description: 'ID пользователя',
+        example: '507f1f77bcf86cd799439011'
+    })
+    async resendEmailChangeCode(
+        @Param('id') id: string,
+        @Request() req
+    ): Promise<{ message: string }> {
+        try {
+            // Проверяем права доступа
+            const currentUserId = req.user.userId;
+            const isAdmin = req.user.roles && req.user.roles.includes('admin');
+
+            if (id !== currentUserId && !isAdmin) {
+                throw new ForbiddenException('У вас нет прав на повторную отправку кода другому пользователю');
+            }
+
+            this.logger.log(`Повторная отправка кода изменения email для пользователя: ${id}`);
+
+            await this.usersService.resendEmailChangeCode(id);
+
+            return {
+                message: 'Код подтверждения повторно отправлен на новый email адрес'
+            };
+
+        } catch (error) {
+            if (error instanceof HttpException) {
+                throw error;
+            }
+
+            this.logger.error(`Ошибка при повторной отправке кода изменения email для пользователя ${id}:`, error.stack);
+            throw new InternalServerErrorException('Произошла ошибка при отправке кода');
+        }
+    }
+
+    @Post(':id/cancel-email-change')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin', 'user')
+    @ApiOperation({ summary: 'Отмена изменения email' })
+    @ApiResponse({
+        status: 200,
+        description: 'Изменение email отменено',
+        type: UpdateUserResponseDto
+    })
+    @ApiResponse({ status: 400, description: 'Нет активного запроса на изменение email' })
+    @ApiResponse({ status: 401, description: 'Не авторизован' })
+    @ApiResponse({ status: 403, description: 'Нет прав доступа' })
+    @ApiParam({
+        name: 'id',
+        description: 'ID пользователя',
+        example: '507f1f77bcf86cd799439011'
+    })
+    async cancelEmailChange(
+        @Param('id') id: string,
+        @Request() req
+    ): Promise<UpdateUserResponseDto> {
+        try {
+            // Проверяем права доступа
+            const currentUserId = req.user.userId;
+            const isAdmin = req.user.roles && req.user.roles.includes('admin');
+
+            if (id !== currentUserId && !isAdmin) {
+                throw new ForbiddenException('У вас нет прав на отмену изменения email другого пользователя');
+            }
+
+            this.logger.log(`Отмена изменения email для пользователя: ${id}`);
+
+            const user = await this.usersService.cancelEmailChange(id);
+
+            return new UpdateUserResponseDto('Изменение email отменено', user);
+
+        } catch (error) {
+            if (error instanceof HttpException) {
+                throw error;
+            }
+
+            this.logger.error(`Ошибка при отмене изменения email для пользователя ${id}:`, error.stack);
+            throw new InternalServerErrorException('Произошла ошибка при отмене изменения email');
+        }
+    }
+
+    @Get(':id/email-change-status')
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles('admin', 'user')
+    @ApiOperation({ summary: 'Статус изменения email' })
+    @ApiResponse({
+        status: 200,
+        description: 'Статус изменения email',
+        schema: {
+            type: 'object',
+            properties: {
+                hasPendingEmailChange: { type: 'boolean', example: true },
+                currentEmail: { type: 'string', example: 'old@example.com' },
+                pendingEmail: { type: 'string', example: 'new@example.com' },
+                codeExpiresAt: { type: 'string', example: '2025-01-01T10:15:00Z' }
+            }
+        }
+    })
+    @ApiResponse({ status: 401, description: 'Не авторизован' })
+    @ApiResponse({ status: 403, description: 'Нет прав доступа' })
+    @ApiParam({
+        name: 'id',
+        description: 'ID пользователя',
+        example: '507f1f77bcf86cd799439011'
+    })
+    async getEmailChangeStatus(
+        @Param('id') id: string,
+        @Request() req
+    ): Promise<{
+        hasPendingEmailChange: boolean;
+        currentEmail: string;
+        pendingEmail?: string;
+        codeExpiresAt?: Date;
+    }> {
+        try {
+            // Проверяем права доступа
+            const currentUserId = req.user.userId;
+            const isAdmin = req.user.roles && req.user.roles.includes('admin');
+
+            if (id !== currentUserId && !isAdmin) {
+                throw new ForbiddenException('У вас нет прав на просмотр статуса изменения email другого пользователя');
+            }
+
+            const user = await this.usersService.findById(id);
+            if (!user) {
+                throw new NotFoundException('Пользователь не найден');
+            }
+
+            return {
+                hasPendingEmailChange: !!user.pendingEmail,
+                currentEmail: user.email,
+                pendingEmail: user.pendingEmail || undefined,
+                codeExpiresAt: user.emailChangeCodeExpires || undefined
+            };
+
+        } catch (error) {
+            if (error instanceof HttpException) {
+                throw error;
+            }
+
+            this.logger.error(`Ошибка при получении статуса изменения email для пользователя ${id}:`, error.stack);
+            throw new InternalServerErrorException('Произошла ошибка при получении статуса');
         }
     }
 }

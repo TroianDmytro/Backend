@@ -523,53 +523,58 @@ export class UsersService {
             delete (updateUserDto as any).isEmailVerified;
         }
 
-        // Если пользователь пытается изменить email, проверяем, не занят ли этот email
+        // НОВАЯ ЛОГИКА для изменения email
         if (updateUserDto.email && updateUserDto.email !== user.email) {
+            // Проверяем, не занят ли новый email
             const existingUser = await this.findOne(updateUserDto.email);
             if (existingUser) {
                 throw new ConflictException(`Email ${updateUserDto.email} уже занят`);
             }
 
-            // Сохраняем старый email для отправки уведомления
-            const oldEmail = user.email;
+            // Сохраняем новый email в специальное поле до подтверждения
+            user.pendingEmail = updateUserDto.email;
 
-            // Обновляем email
-            user.email = updateUserDto.email;
+            // Генерируем код подтверждения (как при регистрации)
+            const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+            const codeExpires = new Date();
+            codeExpires.setMinutes(codeExpires.getMinutes() + 15); // 15 минут
 
-            // Сбрасываем статус верификации при изменении email
-            user.isEmailVerified = false;
+            user.emailChangeCode = verificationCode;
+            user.emailChangeCodeExpires = codeExpires;
 
-            // Генерируем новый токен для верификации
-            user.verificationToken = uuidv4();
-            const verificationTokenExpires = new Date();
-            verificationTokenExpires.setHours(verificationTokenExpires.getHours() + 24);
-            user.verificationTokenExpires = verificationTokenExpires;
+            this.logger.log(`Запрос на изменение email: ${user.email} → ${updateUserDto.email}`);
 
-            // Сохраняем пользователя, чтобы получить обновленный документ
-            await user.save();
-
-            // Формируем URL для верификации
-            const verificationUrl = `${process.env.APP_URL || 'http://localhost:3000'}/auth/verify-email?token=${user.verificationToken}`;
-
-            // Отправляем уведомления об изменении email
+            // Отправляем код подтверждения на НОВЫЙ email
             try {
-                await this.emailService.sendEmailChangeNotification(oldEmail, user.email, verificationUrl);
+                await this.emailService.sendEmailChangeVerificationCode(
+                    updateUserDto.email, // На новый email
+                    verificationCode,
+                    user.name
+                );
+
+                // Уведомляем старый email о запросе изменения
+                await this.emailService.sendEmailChangeNotificationToOld(
+                    user.email, // На старый email
+                    updateUserDto.email,
+                    user.name
+                );
             } catch (error) {
-                this.logger.error(`Ошибка при отправке уведомлений об изменении email: ${error.message}`);
+                this.logger.error(`Ошибка при отправке кодов изменения email: ${error.message}`);
+                throw new ConflictException('Ошибка при отправке кода подтверждения');
             }
-        } else {
-            // Если email не менялся, обновляем остальные поля
-            // if (updateUserDto.password) {
-            //     user.password = await bcrypt.hash(updateUserDto.password, 10);
-            // }
 
-            if (updateUserDto.name !== undefined) user.name = updateUserDto.name;
-            if (updateUserDto.second_name !== undefined) user.second_name = updateUserDto.second_name;
-            if (updateUserDto.age !== undefined) user.age = updateUserDto.age;
-            if (updateUserDto.telefon_number !== undefined) user.telefon_number = updateUserDto.telefon_number;
-
-            await user.save();
+            // НЕ МЕНЯЕМ email в основном поле! Он изменится только после подтверждения
+            delete updateUserDto.email; // Удаляем из обновляемых полей
         }
+
+        // Обновляем остальные поля (кроме email, который обрабатывается отдельно)
+        if (updateUserDto.name !== undefined) user.name = updateUserDto.name;
+        if (updateUserDto.second_name !== undefined) user.second_name = updateUserDto.second_name;
+        if (updateUserDto.age !== undefined) user.age = updateUserDto.age;
+        if (updateUserDto.telefon_number !== undefined) user.telefon_number = updateUserDto.telefon_number;
+        if (updateUserDto.avatarId !== undefined) user.avatarId = updateUserDto.avatarId as any;
+
+        await user.save();
 
         const updatedUser = await this.findById(id);
         if (!updatedUser) {
@@ -642,5 +647,138 @@ export class UsersService {
         });
     }
 
-    
+    /**
+ * Подтверждение изменения email с помощью кода
+ * @param userId - ID пользователя
+ * @param code - Код подтверждения
+ */
+    async confirmEmailChange(userId: string, code: string): Promise<UserDocument> {
+        const user = await this.findById(userId);
+        if (!user) {
+            throw new NotFoundException('Пользователь не найден');
+        }
+
+        // Проверяем наличие запроса на изменение email
+        if (!user.pendingEmail || !user.emailChangeCode) {
+            throw new ConflictException('Нет активного запроса на изменение email');
+        }
+
+        // Проверяем код и срок действия
+        if (user.emailChangeCode !== code) {
+            throw new ConflictException('Неверный код подтверждения');
+        }
+
+        if (!user.emailChangeCodeExpires || user.emailChangeCodeExpires < new Date()) {
+            // Очищаем просроченные данные
+            user.pendingEmail = null;
+            user.emailChangeCode = null;
+            user.emailChangeCodeExpires = null;
+            await user.save();
+
+            throw new ConflictException('Код подтверждения просрочен');
+        }
+
+        // Проверяем, что новый email все еще свободен
+        const existingUser = await this.findOne(user.pendingEmail);
+        if (existingUser && existingUser.id?.toString() !== userId) {
+            // Очищаем данные изменения email
+            user.pendingEmail = null;
+            user.emailChangeCode = null;
+            user.emailChangeCodeExpires = null;
+            await user.save();
+
+            throw new ConflictException('Email уже занят другим пользователем');
+        }
+
+        const oldEmail = user.email;
+
+        // ✅ ПОДТВЕРЖДАЕМ ИЗМЕНЕНИЕ - переносим pending email в основной
+        user.email = user.pendingEmail;
+        user.isEmailVerified = true; // Email подтвержден новым кодом
+
+        // Очищаем временные поля
+        user.pendingEmail = null;
+        user.emailChangeCode = null;
+        user.emailChangeCodeExpires = null;
+
+        await user.save();
+
+        this.logger.log(`Email изменен: ${oldEmail} → ${user.email} для пользователя ${userId}`);
+
+        // Отправляем уведомление об успешном изменении
+        try {
+            await this.emailService.sendEmailChangeSuccessNotification(
+                user.email, // На новый email
+                oldEmail,
+                user.name
+            );
+        } catch (error) {
+            this.logger.error(`Ошибка отправки уведомления об изменении email: ${error.message}`);
+        }
+
+        return user;
+    }
+
+    /**
+     * Повторная отправка кода для изменения email
+     * @param userId - ID пользователя
+     */
+    async resendEmailChangeCode(userId: string): Promise<void> {
+        const user = await this.findById(userId);
+        if (!user) {
+            throw new NotFoundException('Пользователь не найден');
+        }
+
+        if (!user.pendingEmail) {
+            throw new ConflictException('Нет активного запроса на изменение email');
+        }
+
+        // Генерируем новый код
+        const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const codeExpires = new Date();
+        codeExpires.setMinutes(codeExpires.getMinutes() + 15);
+
+        user.emailChangeCode = verificationCode;
+        user.emailChangeCodeExpires = codeExpires;
+
+        await user.save();
+
+        // Отправляем новый код
+        await this.emailService.sendEmailChangeVerificationCode(
+            user.pendingEmail,
+            verificationCode,
+            user.name
+        );
+
+        this.logger.log(`Повторно отправлен код изменения email для пользователя: ${userId}`);
+    }
+
+    /**
+     * Отмена изменения email
+     * @param userId - ID пользователя
+     */
+    async cancelEmailChange(userId: string): Promise<UserDocument> {
+        const user = await this.findById(userId);
+        if (!user) {
+            throw new NotFoundException('Пользователь не найден');
+        }
+
+        if (!user.pendingEmail) {
+            throw new ConflictException('Нет активного запроса на изменение email');
+        }
+
+        const pendingEmail = user.pendingEmail;
+
+        // Очищаем все данные изменения email
+        user.pendingEmail = null;
+        user.emailChangeCode = null;
+        user.emailChangeCodeExpires = null;
+
+        await user.save();
+
+        this.logger.log(`Отменено изменение email с ${user.email} на ${pendingEmail} для пользователя ${userId}`);
+
+        return user;
+    }
+
 }

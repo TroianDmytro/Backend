@@ -71,8 +71,6 @@ export class User {
     @Prop({ type: Date })
     last_google_login?: Date; // Последний вход через Google
 
-    // === ОСТАЛЬНЫЕ ПОЛЯ ОСТАЮТСЯ БЕЗ ИЗМЕНЕНИЙ ===
-
     @Prop({ default: false })
     isEmailVerified: boolean;
 
@@ -112,6 +110,16 @@ export class User {
 
     createdAt?: Date;
     updatedAt?: Date;
+
+    // === ПОЛЯ ДЛЯ ИЗМЕНЕНИЯ EMAIL ===
+    @Prop({ type: String, default: null })
+    pendingEmail?: string | null; // Новый email, ожидающий подтверждения
+
+    @Prop({ type: String, default: null })
+    emailChangeCode?: string | null; // Код для подтверждения изменения email
+
+    @Prop({ type: Date, default: null })
+    emailChangeCodeExpires?: Date | null; // Срок действия кода изменения email
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

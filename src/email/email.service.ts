@@ -434,7 +434,7 @@ export class EmailService {
                 html
             });
 
-            console.log(`Email отправлен: ${info.messageId} -> ${to}`);
+            console.log(`Email отправлен: ${info.from} -> ${to}`);
         } catch (error) {
             console.error(`Ошибка отправки email: ${error.message}`, error.stack);
             throw error;
@@ -506,4 +506,148 @@ export class EmailService {
         await this.sendEmail(email, subject, html);
     }
 
+    /**
+     * Отправка кода подтверждения для изменения email на НОВЫЙ email
+     */
+    async sendEmailChangeVerificationCode(
+        newEmail: string,
+        code: string,
+        name?: string
+    ): Promise<void> {
+        const subject = 'Подтверждение изменения email';
+        const html = `
+        <h2>Подтверждение изменения email адреса</h2>
+        <p>Здравствуйте${name ? `, ${name}` : ''}!</p>
+        
+        <p>Вы запросили изменение email адреса в вашем профиле на <strong>${newEmail}</strong>.</p>
+        
+        <div style="background-color: #e3f2fd; padding: 20px; border-radius: 8px; border-left: 4px solid #2196f3; margin: 20px 0;">
+            <p>Для подтверждения нового email адреса введите этот код:</p>
+            <h1 style="font-family: monospace; font-size: 36px; color: #1976d2; letter-spacing: 5px; margin: 10px 0; text-align: center;">
+                ${code}
+            </h1>
+        </div>
+
+        <div style="background-color: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 20px 0;">
+            <h4 style="margin-top: 0; color: #856404;">⚠️ Важно:</h4>
+            <ul style="color: #856404; margin: 10px 0 0 20px;">
+                <li>Код действителен только 15 минут</li>
+                <li>Ваш текущий email остается активным до подтверждения</li>
+                <li>После подтверждения новый email станет основным для входа</li>
+            </ul>
+        </div>
+
+        <p>Если вы не запрашивали изменение email, просто проигнорируйте это письмо.</p>
+        
+        <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+        <p style="color: #666; font-size: 12px;">
+            Это автоматическое письмо, не отвечайте на него.
+        </p>
+    `;
+
+        await this.sendEmail(newEmail, subject, html);
+    }
+
+    /**
+     * Уведомление на СТАРЫЙ email о запросе изменения
+     */
+    async sendEmailChangeNotificationToOld(
+        oldEmail: string,
+        newEmail: string,
+        name?: string
+    ): Promise<void> {
+        const subject = 'Запрос на изменение email адреса';
+        const html = `
+        <h2>Запрос на изменение email</h2>
+        <p>Здравствуйте${name ? `, ${name}` : ''}!</p>
+        
+        <div style="background-color: #fff3cd; padding: 20px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #856404;">🔄 Изменение email адреса</h3>
+            <p style="color: #856404;">
+                Был отправлен запрос на изменение email адреса с <strong>${oldEmail}</strong> 
+                на <strong>${newEmail}</strong>.
+            </p>
+        </div>
+
+        <p><strong>Что происходит:</strong></p>
+        <ul>
+            <li>На новый email отправлен код подтверждения</li>
+            <li>Ваш текущий email остается активным до подтверждения</li>
+            <li>Если код не будет введен в течение 15 минут, изменение отменится</li>
+        </ul>
+
+        <div style="background-color: #f8d7da; padding: 15px; border-radius: 8px; border-left: 4px solid #dc3545; margin: 20px 0;">
+            <h4 style="margin-top: 0; color: #721c24;">🚨 Безопасность</h4>
+            <p style="color: #721c24;">
+                <strong>Если это были не вы</strong>, немедленно:
+            </p>
+            <ul style="color: #721c24; margin: 10px 0 0 20px;">
+                <li>Измените пароль вашего аккаунта</li>
+                <li>Обратитесь в службу поддержки</li>
+                <li>Проверьте безопасность вашего аккаунта</li>
+            </ul>
+        </div>
+
+        <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+        <p style="color: #666; font-size: 12px;">
+            Это автоматическое письмо, не отвечайте на него.
+        </p>
+    `;
+
+        await this.sendEmail(oldEmail, subject, html);
+    }
+
+    /**
+     * Уведомление об успешном изменении email
+     */
+    async sendEmailChangeSuccessNotification(
+        newEmail: string,
+        oldEmail: string,
+        name?: string
+    ): Promise<void> {
+        const subject = 'Email успешно изменен';
+        const html = `
+        <h2>Email адрес успешно изменен!</h2>
+        <p>Здравствуйте${name ? `, ${name}` : ''}!</p>
+        
+        <div style="background-color: #d4edda; padding: 20px; border-radius: 8px; border-left: 4px solid #28a745; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #155724;">✅ Изменение подтверждено</h3>
+            <p style="color: #155724;">
+                Ваш email адрес успешно изменен:
+            </p>
+            <p style="color: #155724; margin: 10px 0;">
+                <strong>Старый:</strong> ${oldEmail}<br>
+                <strong>Новый:</strong> ${newEmail}
+            </p>
+        </div>
+
+        <p><strong>Что изменилось:</strong></p>
+        <ul>
+            <li>Для входа в систему теперь используйте новый email</li>
+            <li>Все уведомления будут приходить на новый адрес</li>
+            <li>Старый email больше не связан с вашим аккаунтом</li>
+        </ul>
+
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="${this.app_url || 'https://neuronest.pp.ua'}" 
+               style="background-color: #28a745; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+                Перейти к профилю
+            </a>
+        </div>
+
+        <div style="background-color: #f8d7da; padding: 15px; border-radius: 8px; border-left: 4px solid #dc3545; margin: 20px 0;">
+            <h4 style="margin-top: 0; color: #721c24;">🚨 Безопасность</h4>
+            <p style="color: #721c24;">
+                Если это изменение было выполнено не вами, немедленно обратитесь в службу поддержки.
+            </p>
+        </div>
+        
+        <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+        <p style="color: #666; font-size: 12px;">
+            Это автоматическое письмо, не отвечайте на него.
+        </p>
+    `;
+
+        await this.sendEmail(newEmail, subject, html);
+    }
 }

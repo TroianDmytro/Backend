@@ -93,6 +93,27 @@ export class UserProfileDto {
     })
     avatar_url?: string;
 
+    @ApiProperty({
+        example: 'newemail@example.com',
+        description: 'Новый email, ожидающий подтверждения',
+        required: false
+    })
+    pendingEmail?: string;
+
+    @ApiProperty({
+        example: true,
+        description: 'Есть ли запрос на изменение email'
+    })
+    hasPendingEmailChange?: boolean;
+
+    @ApiProperty({
+        example: '2025-01-01T10:15:00Z',
+        description: 'Срок действия кода изменения email',
+        required: false
+    })
+    emailChangeCodeExpiresAt?: Date;
+
+    // ОБНОВИТЬ конструктор:
     constructor(user: any) {
         this.id = user._id?.toString() || user.id;
         this.avatar = user.avatarId?.toString() || null;
@@ -110,5 +131,10 @@ export class UserProfileDto {
         this.updatedAt = user.updatedAt;
         this.is_google_user = user.is_google_user;
         this.avatar_url = user.avatar_url;
+
+        // Новые поля для изменения email
+        this.pendingEmail = user.pendingEmail;
+        this.hasPendingEmailChange = !!user.pendingEmail;
+        this.emailChangeCodeExpiresAt = user.emailChangeCodeExpires;
     }
 } 
