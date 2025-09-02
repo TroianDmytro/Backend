@@ -15,8 +15,9 @@ import { PaymentModule } from 'src/payment/payment.module';
     imports: [
         MongooseModule.forFeature([
             { name: Subscription.name, schema: SubscriptionSchema },
+            { name: User.name, schema: UserSchema },
             { name: Course.name, schema: CourseSchema },
-            { name: User.name, schema: UserSchema }
+
         ]),
         EmailModule,
         forwardRef(() => PaymentModule),

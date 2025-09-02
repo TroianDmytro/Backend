@@ -6,16 +6,25 @@ import { LessonsController } from './lessons.controller';
 import { Lesson, LessonSchema } from './schemas/lesson.schema';
 import { Course, CourseSchema } from '../courses/schemas/course.schema';
 import { HomeworkSubmission, HomeworkSubmissionSchema } from '../homework/schemas/homework-submission.schema';
+import { Subject, SubjectSchema } from 'src/subjects/schemas/subject.schema';
+import { Teacher, TeacherSchema } from 'src/teachers/schemas/teacher.schema';
+import { User, UserSchema } from 'src/users/schemas/user.schema';
+import { SubjectsModule } from 'src/subjects/subjects.module';
+import { CoursesModule } from 'src/courses/courses.module';
+import { HomeworkModule } from 'src/homework/homework.module';
 
 @Module({
     imports: [
         MongooseModule.forFeature([
             { name: Lesson.name, schema: LessonSchema },
             { name: Course.name, schema: CourseSchema },
-            { name: HomeworkSubmission.name, schema: HomeworkSubmissionSchema }
+            { name: Subject.name, schema: SubjectSchema }, // НОВОЕ
+            { name: Teacher.name, schema: TeacherSchema },
+            { name: User.name, schema: UserSchema }
         ]),
-        // forwardRef(() => CoursesModule), // Избегаем циклических зависимостей
-        // forwardRef(() => HomeworkModule)
+        forwardRef(() => SubjectsModule),
+        forwardRef(() => CoursesModule), // Избегаем циклических зависимостей
+        forwardRef(() => HomeworkModule)
     ],
     controllers: [LessonsController],
     providers: [LessonsService],

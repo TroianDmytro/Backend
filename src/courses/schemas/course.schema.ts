@@ -1,165 +1,71 @@
-// src/courses/schemas/course.schema.ts
+// src/courses/schemas/course.schema.ts - ОБНОВЛЕННАЯ СХЕМА
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document, Schema as MongooseSchema } from 'mongoose';
+import { Document, Types } from 'mongoose';
+import { Transform, Type } from 'class-transformer';
+import { Teacher } from '../../teachers/schemas/teacher.schema';
+import { Subject } from '../../subjects/schemas/subject.schema';
 
 export type CourseDocument = Course & Document;
 
 @Schema({
-    timestamps: true, // автоматически добавляет createdAt и updatedAt
+    timestamps: true,
     collection: 'courses'
 })
 export class Course {
+    @Transform(({ value }) => value.toString())
+    _id: Types.ObjectId;
+
     @Prop({ required: true, trim: true })
-    title: string; // Название курса
+    name: string;
 
-    @Prop({ required: true, unique: true, trim: true })
-    slug: string; // URL-дружелюбный идентификатор
-
-    @Prop({ required: true })
-    description: string; // Описание курса
-
-    @Prop({ type: String })
-    image_url?: string; // URL изображения курса
+    @Prop({ trim: true })
+    description?: string;
 
     @Prop({ required: true, min: 0 })
-    price: number; // Цена курса
+    price: number;
 
-    @Prop({ min: 0, max: 100, default: 0 })
-    discount_percent: number; // Процент скидки
-
-    @Prop({ required: true, enum: ['USD', 'EUR', 'UAH', 'RUB'], default: 'USD' })
-    currency: string; // Валюта
+    @Prop({ required: true })
+    startDate: Date;
 
     @Prop({ default: true })
-    is_active: boolean; // Активен ли курс
+    isActive: boolean;
 
     @Prop({ default: false })
-    is_featured: boolean; // Рекомендуемый курс
+    isPublished: boolean;
 
-    @Prop({ default: false })
-    isPublished: boolean;// Статус публикации курса
+    @Prop({ type: Types.ObjectId, ref: 'Teacher' })
+    @Type(() => Teacher)
+    mainTeacher?: Teacher;
 
-    @Prop({ min: 0, default: 0 })
-    duration_hours: number; // Продолжительность в часах
+    // НОВОЕ: Предметы курса с привязанными преподавателями
+    @Prop([{
+        subject: { type: Types.ObjectId, ref: 'Subject', required: true },
+        teacher: { type: Types.ObjectId, ref: 'Teacher' },
+        startDate: { type: Date, required: true },
+        isActive: { type: Boolean, default: true },
+        addedAt: { type: Date, default: Date.now }
+    }])
+    courseSubjects: {
+        subject: Subject;
+        teacher?: Teacher;
+        startDate: Date;
+        isActive: boolean;
+        addedAt: Date;
+    }[];
 
-    @Prop({ min: 0, default: 0 })
-    lessons_count: number; // Количество уроков
+    @Prop({ type: Types.ObjectId, ref: 'Category' })
+    category?: Types.ObjectId;
 
-    @Prop({ type: [String], default: [] })
-    tags: string[]; // Теги курса
+    @Prop({ type: Types.ObjectId, ref: 'DifficultyLevel' })
+    difficultyLevel?: Types.ObjectId;
 
-    @Prop({ type: String })
-    preview_video_url?: string; // URL превью видео
-
-    @Prop({ type: String })
-    certificate_template?: string; // Шаблон сертификата
-
-    @Prop({ default: true })
-    allow_comments: boolean; // Разрешены ли комментарии
-
-    @Prop({ default: false })
-    requires_approval: boolean; // Требует ли подтверждения
-
-    //Связь с преподавателем через ObjectId
-    @Prop({
-        type: MongooseSchema.Types.ObjectId,
-        ref: 'Teacher',
-        required: true
-    })
-    teacherId: MongooseSchema.Types.ObjectId; // ID преподавателя
-
-    // Связи с категорией и уровнем сложности
-    @Prop({
-        type: MongooseSchema.Types.ObjectId,
-        ref: 'Category',
-        required: true
-    })
-    categoryId: MongooseSchema.Types.ObjectId; // ID категории курса
-
-    @Prop({
-        type: MongooseSchema.Types.ObjectId,
-        ref: 'DifficultyLevel',
-        required: true
-    })
-    difficultyLevelId: MongooseSchema.Types.ObjectId; // ID уровня сложности
-
-    @Prop({ required: false })
-    short_description: string;
-
-    @Prop({ required: false })
-    logo_url: string;
-
-    @Prop({ default: 0, min: 0, max: 5 })
-    rating: number;
-
-    @Prop({ default: 0, min: 0 })
-    current_students_count: number; // 0 означает без ограничений
-
-     @Prop({ default: 0, min: 0 }) // 0 означает без ограничений
-    max_students: number;
-    
-    @Prop({ default: 'beginner', enum: ['beginner', 'intermediate', 'advanced'] })
-    level: string;
-
-    // Статистические поля (обновляются автоматически)
-    @Prop({ min: 0, default: 0 })
-    students_count: number; // Количество студентов
-
-    @Prop({ min: 0, max: 5, default: 0 })
-    average_rating: number; // Средняя оценка
-
-    @Prop({ min: 0, default: 0 })
-    reviews_count: number; // Количество отзывов
-
-    @Prop({ min: 0, default: 0 })
-    completed_count: number; // Количество завершенных курсов
-
-    @Prop({ min: 0, max: 100, default: 0 })
-    completion_rate: number; // Процент завершения
-
-    // Метаданные
-    @Prop({ type: Date, default: Date.now })
-    published_at: Date; // Дата публикации
-
-    @Prop({ type: Date })
-    updated_at?: Date; // Дата последнего обновления
-
+    createdAt: Date;
+    updatedAt: Date;
 }
 
 export const CourseSchema = SchemaFactory.createForClass(Course);
 
-// Создаем индексы для оптимизации запросов
-CourseSchema.index({ categoryId: 1 }); // Индекс для поиска по категориям
-CourseSchema.index({ difficultyLevelId: 1 }); // Индекс для поиска по уровням сложности
-CourseSchema.index({ teacherId: 1 }); // Индекс для поиска по преподавателям
-CourseSchema.index({ is_active: 1, is_featured: 1 }); // Составной индекс для активных и рекомендуемых
-CourseSchema.index({ price: 1 }); // Индекс для сортировки по цене
-CourseSchema.index({ average_rating: 1 }); // Индекс для сортировки по рейтингу
-CourseSchema.index({ created_at: -1 }); // Индекс для сортировки по дате создания
-
-/**
- * Объяснение изменений в схеме курсов:
- * 
- * 1. **УДАЛЕННЫЕ ПОЛЯ:**
- *    - category: string → убрано (заменено на categoryId)
- *    - difficulty_level: string → убрано (заменено на difficultyLevelId)
- * 
- * 2. **НОВЫЕ ПОЛЯ-СВЯЗИ:**
- *    - categoryId: ObjectId - связь с коллекцией categories
- *    - difficultyLevelId: ObjectId - связь с коллекцией difficulty_levels
- * 
- * 3. **ПРЕИМУЩЕСТВА НОВОЙ СТРУКТУРЫ:**
- *    - Нормализация данных (избежание дублирования)
- *    - Возможность получать детальную информацию через populate()
- *    - Централизованное управление категориями и уровнями
- *    - Автоматическое обновление статистики
- * 
- * 4. **ИНДЕКСЫ:**
- *    - Добавлены индексы для новых полей связей
- *    - Оптимизированы запросы по категориям и уровням сложности
- * 
- * 5. **POPULATE ВОЗМОЖНОСТИ:**
- *    - .populate('categoryId') - получение данных категории
- *    - .populate('difficultyLevelId') - получение данных уровня
- *    - .populate('teacherId') - получение данных преподавателя
- */
+// Индексы для оптимизации поиска
+CourseSchema.index({ 'courseSubjects.subject': 1 });
+CourseSchema.index({ 'courseSubjects.teacher': 1 });
+CourseSchema.index({ startDate: 1 });

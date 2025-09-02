@@ -10,6 +10,11 @@ import { Lesson, LessonSchema } from '../lessons/schemas/lesson.schema';
 import { Course, CourseSchema } from '../courses/schemas/course.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { Teacher, TeacherSchema } from '../teachers/schemas/teacher.schema';
+import { Subscription, SubscriptionSchema } from 'src/subscriptions/schemas/subscription.schema';
+import { LessonsModule } from 'src/lessons/lessons.module';
+import { CoursesModule } from 'src/courses/courses.module';
+import { UsersModule } from 'src/users/users.module';
+import { TeachersModule } from 'src/teachers/teachers.module';
 
 @Module({
     imports: [
@@ -19,7 +24,8 @@ import { Teacher, TeacherSchema } from '../teachers/schemas/teacher.schema';
             { name: Lesson.name, schema: LessonSchema },
             { name: Course.name, schema: CourseSchema },
             { name: User.name, schema: UserSchema },
-            { name: Teacher.name, schema: TeacherSchema }
+            { name: Teacher.name, schema: TeacherSchema },
+            { name: Subscription.name, schema: SubscriptionSchema }
         ]),
         // Настройка Multer для загрузки файлов
         MulterModule.register({
@@ -30,10 +36,10 @@ import { Teacher, TeacherSchema } from '../teachers/schemas/teacher.schema';
             },
         }),
         // Избегаем циклических зависимостей
-        // forwardRef(() => LessonsModule),
-        // forwardRef(() => CoursesModule),
-        // forwardRef(() => UsersModule),
-        // forwardRef(() => TeachersModule)
+        forwardRef(() => LessonsModule),
+        forwardRef(() => CoursesModule),
+        forwardRef(() => UsersModule),
+        forwardRef(() => TeachersModule)
     ],
     controllers: [HomeworkController],
     providers: [HomeworkService],

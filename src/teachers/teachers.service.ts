@@ -258,7 +258,7 @@ export class TeachersService {
         await teacher.save();
 
         // Обновляем курс
-        course.teacherId = teacherId as any;
+        course.mainTeacher = teacherId as any;
         await course.save();
 
         this.logger.log(`Курс ${courseId} назначен преподавателю ${teacherId}`);
@@ -292,7 +292,7 @@ export class TeachersService {
         await teacher.save();
 
         // Обнуляем преподавателя в курсе
-        course.teacherId = undefined as any;
+        course.mainTeacher = undefined as any;
         await course.save();
 
         this.logger.log(`Курс ${courseId} удален у преподавателя ${teacherId}`);

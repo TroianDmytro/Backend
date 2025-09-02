@@ -216,11 +216,11 @@ export class CategoriesService {
                 level: (course.difficultyLevelId as any).level,
                 color: (course.difficultyLevelId as any).color
             } : null,
-            teacher: course.teacherId ? {
-                id: (course.teacherId as any).id,
-                name: (course.teacherId as any).name,
-                second_name: (course.teacherId as any).second_name,
-                rating: (course.teacherId as any).rating
+            teacher: course.mainTeacher ? {
+                id: (course.mainTeacher as any).id,
+                name: (course.mainTeacher as any).name,
+                second_name: (course.mainTeacher as any).second_name,
+                rating: (course.mainTeacher as any).rating
             } : null
         }));
 

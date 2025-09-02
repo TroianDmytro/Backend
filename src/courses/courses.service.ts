@@ -15,6 +15,8 @@ import { Category } from '../categories/schemas/category.schema';
 import { DifficultyLevel } from '../difficulty-levels/schemas/difficulty-level.schema';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
+import { Subject, SubjectDocument } from 'src/subjects/schemas/subject.schema';
+import { Subscription, SubscriptionDocument } from 'src/subscriptions/schemas/subscription.schema';
 
 
 @Injectable()
@@ -26,6 +28,8 @@ export class CoursesService {
         @InjectModel(Teacher.name) private teacherModel: Model<TeacherDocument>,
         @InjectModel(Category.name) private categoryModel: Model<Category>,
         @InjectModel(DifficultyLevel.name) private difficultyLevelModel: Model<DifficultyLevel>,
+        @InjectModel(Subject.name) private subjectModel: Model<SubjectDocument>,
+        @InjectModel(Subscription.name) private subscriptionModel: Model<SubscriptionDocument>,
     ) { }
 
     /**
@@ -366,7 +370,7 @@ export class CoursesService {
         // (здесь можно добавить проверку subscriptions)
 
         // Сохраняем связи для обновления статистики
-        const teacherId = course.teacherId;
+        const teacherId = course.mainTeacher;
         const categoryId = course.categoryId;
         const difficultyLevelId = course.difficultyLevelId;
 
@@ -546,7 +550,7 @@ export class CoursesService {
             searchQuery
         };
     }
-    
+
     /**
      * ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ для обновления статистики
      */
@@ -845,6 +849,146 @@ export class CoursesService {
             currentPage: page,
             totalPages
         };
+    }
+
+    /**
+ * Добавить предмет к курсу с назначением преподавателя
+ */
+    async addSubjectToCourse(courseId: string, addSubjectDto: {
+        subjectId: string;
+        teacherId?: string;
+        startDate: string;
+    }) {
+        const course = await this.courseModel.findById(courseId);
+        if (!course) {
+            throw new NotFoundException('Курс не найден');
+        }
+
+        // Проверяем, что предмет существует
+        const subject = await this.subjectModel.findById(addSubjectDto.subjectId);
+        if (!subject) {
+            throw new NotFoundException('Предмет не найден');
+        }
+
+        // Проверяем, что преподаватель существует (если указан)
+        if (addSubjectDto.teacherId) {
+            const teacher = await this.teacherModel.findById(addSubjectDto.teacherId);
+            if (!teacher) {
+                throw new NotFoundException('Преподаватель не найден');
+            }
+        }
+
+        // Проверяем, что предмет еще не добавлен к курсу
+        const existingSubject = course.courseSubjects.find(
+            cs => cs.subject.toString() === addSubjectDto.subjectId
+        );
+        if (existingSubject) {
+            throw new BadRequestException('Предмет уже добавлен к курсу');
+        }
+
+        // Добавляем предмет к курсу
+        course.courseSubjects.push({
+            subject: addSubjectDto.subjectId as any,
+            teacher: addSubjectDto.teacherId as any,
+            startDate: new Date(addSubjectDto.startDate),
+            isActive: true,
+            addedAt: new Date()
+        });
+
+        return course.save();
+    }
+
+    /**
+     * Получить предметы курса с информацией о преподавателях
+     */
+    async getCourseSubjects(courseId: string) {
+        const course = await this.courseModel
+            .findById(courseId)
+            .populate({
+                path: 'courseSubjects.subject',
+                select: 'name description studyMaterials'
+            })
+            .populate({
+                path: 'courseSubjects.teacher',
+                select: 'name email expertise'
+            });
+
+        if (!course) {
+            throw new NotFoundException('Курс не найден');
+        }
+
+        return {
+            courseId: course._id,
+            courseName: course.name,
+            subjects: course.courseSubjects.filter(cs => cs.isActive)
+        };
+    }
+
+    /**
+     * Удалить предмет из курса
+     */
+    async removeSubjectFromCourse(courseId: string, subjectId: string) {
+        const course = await this.courseModel.findById(courseId);
+        if (!course) {
+            throw new NotFoundException('Курс не найден');
+        }
+
+        const subjectIndex = course.courseSubjects.findIndex(
+            cs => cs.subject.toString() === subjectId
+        );
+
+        if (subjectIndex === -1) {
+            throw new NotFoundException('Предмет не найден в курсе');
+        }
+
+        // Проверяем, есть ли связанные уроки
+        const lessonsCount = await this.lessonModel.countDocuments({
+            course: courseId,
+            subject: subjectId
+        });
+
+        if (lessonsCount > 0) {
+            throw new BadRequestException(
+                `Невозможно удалить предмет. Существует ${lessonsCount} связанных уроков.`
+            );
+        }
+
+        course.courseSubjects.splice(subjectIndex, 1);
+        return course.save();
+    }
+
+    /**
+     * Записаться на курс с проверкой оплаты и даты начала
+     */
+    async enrollInCourse(courseId: string, enrollDto: { userId: string; paidAmount: number }) {
+        const course = await this.courseModel.findById(courseId);
+        if (!course) {
+            throw new NotFoundException('Курс не найден');
+        }
+
+        // Проверяем, что курс еще не начался (если не указано иное)
+        const now = new Date();
+        if (course.startDate <= now) {
+            throw new BadRequestException(
+                'Курс уже начался. Запись возможна только через администратора.'
+            );
+        }
+
+        // Проверяем оплату
+        if (enrollDto.paidAmount < course.price) {
+            throw new BadRequestException('Недостаточная сумма оплаты');
+        }
+
+        // Создаем подписку
+        const subscription = new this.subscriptionModel({
+            user: enrollDto.userId,
+            course: courseId,
+            status: 'paid',
+            paidAmount: enrollDto.paidAmount,
+            paidAt: now
+        });
+
+        return subscription.save();
     }
 }
 

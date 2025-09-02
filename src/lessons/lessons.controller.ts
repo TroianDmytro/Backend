@@ -12,6 +12,8 @@ import {
     Request,
     Logger,
     NotFoundException,
+    UseInterceptors,
+    UploadedFile,
 } from '@nestjs/common';
 import {
     ApiTags,
@@ -20,6 +22,7 @@ import {
     ApiBearerAuth,
     ApiParam,
     ApiQuery,
+    ApiConsumes,
 } from '@nestjs/swagger';
 import { LessonsService } from './lessons.service';
 import { CreateLessonDto } from './dto/create-lesson.dto';
@@ -27,6 +30,9 @@ import { UpdateLessonDto } from './dto/update-lesson.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
+import { GetUser } from 'src/auth/decorators/get-user.decorator';
+import { FileInterceptor } from '@nestjs/platform-express';
+
 
 @ApiTags('lessons')
 @Controller('lessons')
@@ -259,5 +265,147 @@ export class LessonsController {
             previousLesson: previousLesson
         };
     }
+
+    /**
+ * Отметить посещаемость занятия (только преподаватель)
+ */
+    @Post(':id/attendance')
+    @UseGuards(RolesGuard)
+    @Roles('teacher', 'admin')
+    @ApiOperation({ summary: 'Отметить посещаемость студентов на занятии' })
+    @ApiResponse({ status: 200, description: 'Посещаемость успешно отмечена' })
+    async markAttendance(
+        @Param('id') lessonId: string,
+        @Body() attendanceData: {
+            userId: string;
+            isPresent: boolean;
+            lessonGrade?: number;
+            notes?: string;
+        }[],
+        @GetUser() teacher: any
+    ) {
+        this.logger.log(`Отметка посещаемости для занятия ${lessonId}`);
+        return this.lessonsService.markAttendance(lessonId, attendanceData, teacher._id);
+    }
+
+    /**
+     * Получить посещаемость занятия
+     */
+    @Get(':id/attendance')
+    @UseGuards(RolesGuard)
+    @Roles('teacher', 'admin')
+    @ApiOperation({ summary: 'Получить данные посещаемости занятия' })
+    @ApiResponse({ status: 200, description: 'Данные посещаемости получены' })
+    async getAttendance(@Param('id') lessonId: string) {
+        this.logger.log(`Получение посещаемости для занятия ${lessonId}`);
+        return this.lessonsService.getAttendance(lessonId);
+    }
+
+    /**
+     * Получить занятия по курсу и предмету
+     */
+    @Get('course/:courseId/subject/:subjectId')
+    @ApiOperation({ summary: 'Получить занятия по курсу и предмету' })
+    @ApiResponse({ status: 200, description: 'Список занятий' })
+    async getLessonsByCourseAndSubject(
+        @Param('courseId') courseId: string,
+        @Param('subjectId') subjectId: string,
+        @Query('upcoming') upcoming?: string
+    ) {
+        this.logger.log(`Получение занятий для курса ${courseId} и предмета ${subjectId}`);
+        return this.lessonsService.getLessonsByCourseAndSubject(courseId, subjectId, upcoming === 'true');
+    }
+
+    // src/homework/homework.controller.ts - ДОБАВЛЯЕМ НОВЫЕ МЕТОДЫ К СУЩЕСТВУЮЩЕМУ КОНТРОЛЛЕРУ
+
+    /**
+     * Создать домашнее задание (только преподаватель)
+     */
+    @Post()
+    @UseGuards(RolesGuard)
+    @Roles('teacher', 'admin')
+    @UseInterceptors(FileInterceptor('file'))
+    @ApiOperation({ summary: 'Создать домашнее задание с прикреплением PDF файла' })
+    @ApiConsumes('multipart/form-data')
+    @ApiResponse({ status: 201, description: 'Домашнее задание создано' })
+    async create(
+        @Body() createHomeworkDto: {
+            title: string;
+            description: string;
+            lessonId: string;
+            dueDate: string;
+        },
+        @UploadedFile() file: Express.Multer.File,
+        @GetUser() teacher: any
+    ) {
+        this.logger.log(`Создание домашнего задания для урока ${createHomeworkDto.lessonId}`);
+        return this.homeworkService.create(createHomeworkDto, file, teacher._id);
+    }
+
+    /**
+     * Отправить выполненное домашнее задание (студент)
+     */
+    @Post(':id/submit')
+    @UseGuards(RolesGuard)
+    @Roles('student')
+    @UseInterceptors(FileInterceptor('file'))
+    @ApiOperation({ summary: 'Отправить выполненное домашнее задание (ZIP файл)' })
+    @ApiConsumes('multipart/form-data')
+    @ApiResponse({ status: 200, description: 'Домашнее задание отправлено' })
+    async submitHomework(
+        @Param('id') homeworkId: string,
+        @UploadedFile() file: Express.Multer.File,
+        @GetUser() student: any
+    ) {
+        this.logger.log(`Отправка домашнего задания ${homeworkId} студентом ${student._id}`);
+        return this.homeworkService.submitHomework(homeworkId, file, student._id);
+    }
+
+    /**
+     * Оценить домашнее задание (преподаватель)
+     */
+    @Put('submissions/:submissionId/grade')
+    @UseGuards(RolesGuard)
+    @Roles('teacher', 'admin')
+    @ApiOperation({ summary: 'Оценить выполненное домашнее задание' })
+    @ApiResponse({ status: 200, description: 'Оценка выставлена' })
+    async gradeHomework(
+        @Param('submissionId') submissionId: string,
+        @Body() gradeDto: {
+            grade: number;
+            feedback?: string;
+        },
+        @GetUser() teacher: any
+    ) {
+        this.logger.log(`Оценивание домашнего задания ${submissionId} преподавателем ${teacher._id}`);
+        return this.homeworkService.gradeHomework(submissionId, gradeDto, teacher._id);
+    }
+
+    /**
+     * Получить все отправки домашнего задания (преподаватель)
+     */
+    @Get(':id/submissions')
+    @UseGuards(RolesGuard)
+    @Roles('teacher', 'admin')
+    @ApiOperation({ summary: 'Получить все отправки домашнего задания' })
+    @ApiResponse({ status: 200, description: 'Список отправок домашнего задания' })
+    async getSubmissions(@Param('id') homeworkId: string) {
+        this.logger.log(`Получение отправок для домашнего задания ${homeworkId}`);
+        return this.homeworkService.getSubmissions(homeworkId);
+    }
+
+    /**
+     * Получить домашние задания студента
+     */
+    @Get('student/my-homework')
+    @UseGuards(RolesGuard)
+    @Roles('student')
+    @ApiOperation({ summary: 'Получить домашние задания студента' })
+    @ApiResponse({ status: 200, description: 'Список домашних заданий студента' })
+    async getStudentHomework(@GetUser() student: any) {
+        this.logger.log(`Получение домашних заданий для студента ${student._id}`);
+        return this.homeworkService.getStudentHomework(student._id);
+    }
+
 }
 

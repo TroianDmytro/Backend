@@ -34,6 +34,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { TeachersService } from 'src/teachers/teachers.service';
 import { DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
+import { GetUser } from 'src/auth/decorators/get-user.decorator';
 
 @ApiTags('courses')
 @Controller('courses')
@@ -210,7 +211,7 @@ export class CoursesController {
             throw new NotFoundException('Курс не найден');
         }
 
-        if (!isAdmin && course.teacherId.toString() !== currentUserId) {
+        if (!isAdmin && course.mainTeacher.toString() !== currentUserId) {
             throw new ForbiddenException('У вас нет прав на редактирование этого курса');
         }
 
@@ -254,7 +255,7 @@ export class CoursesController {
             throw new NotFoundException('Курс не найден');
         }
 
-        if (!isAdmin && course.teacherId.toString() !== currentUserId) {
+        if (!isAdmin && course.mainTeacher.toString() !== currentUserId) {
             throw new ForbiddenException('У вас нет прав на удаление этого курса');
         }
 
@@ -306,13 +307,13 @@ export class CoursesController {
         }
 
         // Проверка прав доступа
-        const isOwner = course.teacherId.toString() === currentUserId;
+        const isOwner = course.mainTeacher.toString() === currentUserId;
 
         if (!isAdmin && !isOwner) {
             this.logger.warn(
                 `Отказано в доступе. Пользователь ${req?.user?.email} ` +
                 `(ID: ${currentUserId}) пытается изменить статус публикации курса ${id}. ` +
-                `Владелец курса: ${course.teacherId}`
+                `Владелец курса: ${course.mainTeacher}`
             );
             throw new ForbiddenException(
                 'У вас нет прав на изменение статуса публикации этого курса. ' +
@@ -465,37 +466,6 @@ export class CoursesController {
 
         return {
             categories: categories
-        };
-    }
-
-    /**
-     * POST /courses/:id/enroll - Записаться на курс (создать подписку)
-     */
-    @Post(':id/enroll')
-    @UseGuards(RolesGuard)
-    @Roles('user')
-    @ApiOperation({
-        summary: 'Записаться на курс',
-        description: 'Создает подписку пользователя на курс'
-    })
-    @ApiParam({ name: 'id', description: 'ID курса' })
-    @ApiResponse({ status: 201, description: 'Успешная запись на курс' })
-    @ApiResponse({ status: 400, description: 'Курс недоступен для записи' })
-    @ApiResponse({ status: 409, description: 'Пользователь уже записан на этот курс' })
-    async enrollInCourse(
-        @Param('id') courseId: string,
-        @Request() req?
-    ) {
-        // const userId = req?.user?.userId;
-        const userId = 'temp-user-id'; // Временно для работы без JWT
-
-        this.logger.log(`Пользователь ${userId} записывается на курс ${courseId}`);
-
-        const enrollment = await this.coursesService.enrollStudent(courseId, userId);
-
-        return {
-            message: 'Вы успешно записались на курс',
-            enrollment: enrollment
         };
     }
 
@@ -868,7 +838,74 @@ export class CoursesController {
                 itemsPerPage: limit
             }
         };
+
+
     }
+
+    /**
+* Добавить предмет к курсу(только админ)
+           */
+    @Post(':id/subjects')
+    @UseGuards(RolesGuard)
+    @Roles('admin')
+    @ApiOperation({ summary: 'Добавить предмет к курсу с назначением преподавателя' })
+    @ApiResponse({ status: 200, description: 'Предмет успешно добавлен к курсу' })
+    async addSubjectToCourse(
+        @Param('id') courseId: string,
+        @Body() addSubjectDto: {
+            subjectId: string;
+            teacherId?: string;
+            startDate: string;
+        }
+    ) {
+        this.logger.log(`Добавление предмета ${addSubjectDto.subjectId} к курсу ${courseId}`);
+        return this.coursesService.addSubjectToCourse(courseId, addSubjectDto);
+    }
+
+    /**
+     * Получить предметы курса
+     */
+    @Get(':id/subjects')
+    @ApiOperation({ summary: 'Получить список предметов курса' })
+    @ApiResponse({ status: 200, description: 'Список предметов курса' })
+    async getCourseSubjects(@Param('id') courseId: string) {
+        this.logger.log(`Получение предметов курса ${courseId}`);
+        return this.coursesService.getCourseSubjects(courseId);
+    }
+
+    /**
+     * Удалить предмет из курса (только админ)
+     */
+    @Delete(':courseId/subjects/:subjectId')
+    @UseGuards(RolesGuard)
+    @Roles('admin')
+    @ApiOperation({ summary: 'Удалить предмет из курса' })
+    @ApiResponse({ status: 200, description: 'Предмет успешно удален из курса' })
+    async removeSubjectFromCourse(
+        @Param('courseId') courseId: string,
+        @Param('subjectId') subjectId: string
+    ) {
+        this.logger.log(`Удаление предмета ${subjectId} из курса ${courseId}`);
+        return this.coursesService.removeSubjectFromCourse(courseId, subjectId);
+    }
+
+    /**
+     * Записаться на курс (проверка оплаты и даты начала)
+     */
+    @Post(':id/enroll')
+    @ApiOperation({ summary: 'Записаться на курс' })
+    @ApiResponse({ status: 200, description: 'Успешная запись на курс' })
+    @ApiResponse({ status: 400, description: 'Курс уже начался или не оплачен' })
+    async enrollInCourse(
+        @Param('id') courseId: string,
+        @Body() enrollDto: { userId: string; paidAmount: number },
+        @GetUser() currentUser: any
+    ) {
+        //////////////
+        this.logger.log(`Запись пользователя ${enrollDto.userId} на курс ${courseId}`);
+        return this.coursesService.enrollInCourse(courseId, enrollDto);
+    }
+
 
     /**
      * Объяснение новых эндпоинтов курсов:

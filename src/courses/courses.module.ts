@@ -15,6 +15,8 @@ import { Category, CategorySchema } from '../categories/schemas/category.schema'
 import { DifficultyLevel, DifficultyLevelSchema } from '../difficulty-levels/schemas/difficulty-level.schema';
 import { CategoriesModule } from 'src/categories/categories.module';
 import { DifficultyLevelsModule } from 'src/difficulty-levels/difficulty-levels.module';
+import { Subject, SubjectSchema } from 'src/subjects/schemas/subject.schema';
+import { SubjectsModule } from 'src/subjects/subjects.module';
 
 @Module({
     imports: [
@@ -23,10 +25,12 @@ import { DifficultyLevelsModule } from 'src/difficulty-levels/difficulty-levels.
             { name: Teacher.name, schema: TeacherSchema },
             { name: Lesson.name, schema: LessonSchema },
             { name: Subscription.name, schema: SubscriptionSchema },
-             { name: Category.name, schema: CategorySchema },
+            { name: Subject.name, schema: SubjectSchema },
+            { name: Category.name, schema: CategorySchema },
             { name: DifficultyLevel.name, schema: DifficultyLevelSchema }
         ]),
-        forwardRef(() => TeachersModule), 
+        forwardRef(() => SubjectsModule),
+        forwardRef(() => TeachersModule),
         forwardRef(() => LessonsModule),
         forwardRef(() => SubscriptionsModule),
         forwardRef(() => CategoriesModule),

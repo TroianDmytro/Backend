@@ -33,6 +33,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PaymentService } from '../payment/payment.service';
+import { GetUser } from 'src/auth/decorators/get-user.decorator';
 
 @ApiTags('subscriptions')
 @Controller('subscriptions')
@@ -443,7 +444,7 @@ export class SubscriptionsController {
         }
 
         // Проверяем, что подписка не оплачена
-        if (subscription.is_paid) {
+        if (subscription.status) {
             throw new BadRequestException('Подписка уже оплачена');
         }
 
@@ -590,5 +591,63 @@ export class SubscriptionsController {
             expiredCount: result.expiredCount,
             notifiedCount: result.notifiedCount
         };
+    }
+
+    /**
+ * Записаться на курс с проверкой условий
+ */
+    @Post('enroll')
+    @UseGuards(RolesGuard)
+    @Roles('student')
+    @ApiOperation({ summary: 'Записаться на курс' })
+    @ApiResponse({ status: 201, description: 'Успешная запись на курс' })
+    @ApiResponse({ status: 400, description: 'Невозможно записаться на курс' })
+    async enrollInCourse(
+        @Body() enrollDto: {
+            courseId: string;
+            paidAmount: number;
+        },
+        @GetUser() student: any
+    ) {
+        this.logger.log(`Запись студента ${student._id} на курс ${enrollDto.courseId}`);
+        return this.subscriptionsService.enrollInCourse(enrollDto.courseId, student._id, enrollDto.paidAmount);
+    }
+
+    /**
+     * Принудительная запись на курс (только админ)
+     */
+    @Post('admin-enroll')
+    @UseGuards(RolesGuard)
+    @Roles('admin')
+    @ApiOperation({ summary: 'Принудительная запись на курс (админ)' })
+    @ApiResponse({ status: 201, description: 'Студент записан на курс' })
+    async adminEnrollStudent(
+        @Body() enrollDto: {
+            courseId: string;
+            userId: string;
+            paidAmount: number;
+            canEnrollAfterStart?: boolean;
+        }
+    ) {
+        this.logger.log(`Админская запись пользователя ${enrollDto.userId} на курс ${enrollDto.courseId}`);
+        return this.subscriptionsService.adminEnrollStudent(enrollDto);
+    }
+
+    /**
+     * Обновить статус подписки (только админ)
+     */
+    @Put(':id/status')
+    @UseGuards(RolesGuard)
+    @Roles('admin')
+    @ApiOperation({ summary: 'Обновить статус подписки' })
+    @ApiResponse({ status: 200, description: 'Статус подписки обновлен' })
+    async updateSubscriptionStatus(
+        @Param('id') subscriptionId: string,
+        @Body() statusDto: {
+            status: 'pending' | 'paid' | 'active' | 'completed' | 'cancelled';
+        }
+    ) {
+        this.logger.log(`Обновление статуса подписки ${subscriptionId}`);
+        return this.subscriptionsService.updateStatus(subscriptionId, statusDto.status);
     }
 }

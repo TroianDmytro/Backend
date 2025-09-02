@@ -22,6 +22,7 @@ import { SubscriptionPlansModule } from './subscription-plans/subscription-plans
 import { PaymentModule } from './payment/payment.module';
 import { APP_GUARD, Reflector } from '@nestjs/core';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { SubjectsModule } from './subjects/subjects.module';
 @Module({
   imports: [
     // Подключаем конфигурацию из файла configuration.ts
@@ -78,12 +79,13 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
     HomeworkModule, // Модуль домашних заданий
     SubscriptionsModule, // Модуль подписок
     SubscriptionPlansModule,
-    PaymentModule, // Добавить этот модуль
+    PaymentModule,
+    SubjectsModule,
   ],
   controllers: [AppController, AvatarsController],
   providers: [AppService,
-     Reflector,
-    { provide: APP_GUARD, useClass: JwtAuthGuard }, 
+    Reflector,
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
   ],
 })
 export class AppModule { }

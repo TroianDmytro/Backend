@@ -2,7 +2,7 @@
 import { Injectable, NotFoundException, ConflictException, Logger, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Subscription, SubscriptionDocument } from './schemas/subscription.schema';
+import { Subscription, SubscriptionDocument, SubscriptionStatus } from './schemas/subscription.schema';
 import { Course, CourseDocument } from '../courses/schemas/course.schema';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
@@ -202,7 +202,7 @@ export class SubscriptionsService {
         }
 
         // Проверяем права доступа
-        if (!isAdmin && subscription.userId.toString() !== userId) {
+        if (!isAdmin && subscription.user.toString() !== userId) {
             throw new BadRequestException('У вас нет прав на редактирование этой подписки');
         }
 
@@ -229,8 +229,8 @@ export class SubscriptionsService {
         }
 
         // Если подписка на курс, уменьшаем счетчик студентов
-        if (subscription.subscription_type === 'course' && subscription.courseId) {
-            await this.courseModel.findByIdAndUpdate(subscription.courseId, {
+        if (subscription.subscription_type === 'course' && subscription.course) {
+            await this.courseModel.findByIdAndUpdate(subscription.course, {
                 $inc: { current_students_count: -1 }
             }).exec();
         }
@@ -255,7 +255,7 @@ export class SubscriptionsService {
         }
 
         // Проверяем права доступа
-        if (!isAdmin && subscription.userId.toString() !== userId) {
+        if (!isAdmin && subscription.user.toString() !== userId) {
             throw new BadRequestException('У вас нет прав на отмену этой подписки');
         }
 
@@ -277,15 +277,15 @@ export class SubscriptionsService {
         const updatedSubscription = await subscription.save();
 
         // Если подписка на курс, уменьшаем счетчик студентов
-        if (subscription.subscription_type === 'course' && subscription.courseId) {
-            await this.courseModel.findByIdAndUpdate(subscription.courseId, {
+        if (subscription.subscription_type === 'course' && subscription.course) {
+            await this.courseModel.findByIdAndUpdate(subscription.course, {
                 $inc: { current_students_count: -1 }
             }).exec();
         }
 
         // Отправляем уведомление пользователю
         try {
-            const user = await this.userModel.findById(subscription.userId).exec();
+            const user = await this.userModel.findById(subscription.user).exec();
             if (user) {
                 await this.emailService.sendSubscriptionCancellationNotification(
                     user.email,
@@ -322,7 +322,7 @@ export class SubscriptionsService {
         }
 
         // Проверяем права доступа
-        if (!isAdmin && subscription.userId.toString() !== userId) {
+        if (!isAdmin && subscription.user.toString() !== userId) {
             throw new BadRequestException('У вас нет прав на продление этой подписки');
         }
 
@@ -378,7 +378,7 @@ export class SubscriptionsService {
 
         // Активируем подписку
         subscription.status = 'active';
-        subscription.is_paid = true;
+        // subscription.status = true;
         subscription.payment_transaction_id = transactionId;
         subscription.payment_date = new Date();
         if (paymentMethod) {
@@ -389,7 +389,7 @@ export class SubscriptionsService {
 
         // Отправляем уведомление об активации
         try {
-            const user = await this.userModel.findById(subscription.userId).exec();
+            const user = await this.userModel.findById(subscription.user).exec();
             if (user) {
                 await this.emailService.sendSubscriptionActivationNotification(
                     user.email,
@@ -529,15 +529,15 @@ export class SubscriptionsService {
             expiredCount++;
 
             // Уменьшаем счетчик студентов в курсе
-            if (subscription.subscription_type === 'course' && subscription.courseId) {
-                await this.courseModel.findByIdAndUpdate(subscription.courseId, {
+            if (subscription.subscription_type === 'course' && subscription.course) {
+                await this.courseModel.findByIdAndUpdate(subscription.course, {
                     $inc: { current_students_count: -1 }
                 }).exec();
             }
 
             // Отправляем уведомление пользователю
             try {
-                const user = await this.userModel.findById(subscription.userId).exec();
+                const user = await this.userModel.findById(subscription.user).exec();
                 if (user && subscription.email_notifications) {
                     await this.emailService.sendSubscriptionExpirationNotification(
                         user.email,
@@ -562,7 +562,7 @@ export class SubscriptionsService {
 
         for (const subscription of expiringSoonSubscriptions) {
             try {
-                const user = subscription.userId as any;
+                const user = subscription.user as any;
                 if (user) {
                     await this.emailService.sendSubscriptionExpiringNotification(
                         user.email,
@@ -578,5 +578,102 @@ export class SubscriptionsService {
         this.logger.log(`Обработано истекших подписок: ${expiredCount}, уведомлений отправлено: ${notifiedCount}`);
 
         return { expiredCount, notifiedCount };
+    }
+
+    /**
+ * Записаться на курс с проверкой условий
+ */
+    async enrollInCourse(courseId: string, userId: string, paidAmount: number) {
+        const course = await this.courseModel.findById(courseId);
+        if (!course || !course.isActive) { // ИСПРАВЛЕНО: is_active -> isActive
+            throw new NotFoundException('Курс не найден или неактивен');
+        }
+
+        // Проверяем существующую подписку
+        const existingSubscription = await this.subscriptionModel.findOne({
+            user: userId, // ИСПРАВЛЕНО: userId -> user
+            course: courseId
+        });
+
+        if (existingSubscription) {
+            throw new BadRequestException('Пользователь уже записан на курс');
+        }
+
+        // Проверяем дату начала курса
+        const now = new Date();
+        if (course.startDate <= now) {
+            throw new BadRequestException(
+                'Курс уже начался. Запись возможна только через администратора.'
+            );
+        }
+
+        // Проверяем оплату
+        if (paidAmount < course.price) {
+            throw new BadRequestException('Недостаточная сумма оплаты');
+        }
+
+        const subscription = new this.subscriptionModel({
+            user: userId,
+            course: courseId,
+            status: SubscriptionStatus.PAID,
+            paidAmount,
+            paidAt: now
+        });
+
+        return subscription.save();
+    }
+
+    /**
+     * Принудительная запись на курс администратором
+     */
+    async adminEnrollStudent(enrollDto: {
+        courseId: string;
+        userId: string;
+        paidAmount: number;
+        canEnrollAfterStart?: boolean;
+    }) {
+        const course = await this.courseModel.findById(enrollDto.courseId);
+        if (!course) {
+            throw new NotFoundException('Курс не найден');
+        }
+
+        const user = await this.userModel.findById(enrollDto.userId);
+        if (!user) {
+            throw new NotFoundException('Пользователь не найден');
+        }
+
+        // Проверяем существующую подписку
+        const existingSubscription = await this.subscriptionModel.findOne({
+            user: enrollDto.userId,
+            course: enrollDto.courseId
+        });
+
+        if (existingSubscription) {
+            throw new BadRequestException('Пользователь уже записан на курс');
+        }
+
+        const subscription = new this.subscriptionModel({
+            user: enrollDto.userId,
+            course: enrollDto.courseId,
+            status: 'paid',
+            paidAmount: enrollDto.paidAmount,
+            paidAt: new Date(),
+            canEnrollAfterStart: enrollDto.canEnrollAfterStart || false
+        });
+
+        return subscription.save();
+    }
+
+    /**
+     * Обновить статус подписки
+     */
+    async updateStatus(subscriptionId: string, status: SubscriptionStatus) {
+        const subscription = await this.subscriptionModel.findById(subscriptionId);
+        if (!subscription) {
+            throw new NotFoundException('Подписка не найдена');
+        }
+
+        subscription.status = status;
+        return subscription.save();
     }
 }

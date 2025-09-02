@@ -42,7 +42,7 @@ export class PaymentService {
         }
 
         // Проверяем, что подписка не оплачена
-        if (subscription.is_paid) {
+        if (subscription.status) {
             throw new BadRequestException('Подписка уже оплачена');
         }
 
@@ -59,7 +59,7 @@ export class PaymentService {
             // Создаем запись платежа в БД
             const payment = new this.paymentModel({
                 subscriptionId,
-                userId: subscription.userId,
+                userId: subscription.user,
                 invoiceId: monobankResponse.invoiceId,
                 pageUrl: monobankResponse.pageUrl,
                 amount: Math.round(amount * 100), // в копейках
