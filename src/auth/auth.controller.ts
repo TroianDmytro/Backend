@@ -190,9 +190,11 @@ export class AuthController {
             const tokenData = await this.authService.generateGoogleJWT(req.user);
             console.log(`✅ JWT токен сгенерирован для: ${req.user.email}`);
 
+            //TODO
             // Проверяем переменную окружения для отладочного режима
             const showDebugPage = process.env.GOOGLE_AUTH_DEBUG === 'true';
-            const frontendUrl = this.configService.get<string>('app.frontendUrl');
+            // const showDebugPage = true;
+            const frontendUrl = this.configService.get<string>('google.callbackUrl');
             
             if (showDebugPage) {
                 // Показываем отладочную страницу с токеном
@@ -753,7 +755,6 @@ export class AuthController {
         }
     }
 
-    // HTML страницы остаются без изменений
     private getSuccessPage(email: string): string {
         return `
     <!DOCTYPE html>
