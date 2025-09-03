@@ -44,7 +44,7 @@ export class Lesson {
     @Type(() => Teacher)
     teacher: Teacher;
 
-    // НОВОЕ: Посещаемость студентов
+    // НОВОЕ: Посещаемость студентов с оценками за занятие
     @Prop([{
         user: { type: Types.ObjectId, ref: 'User', required: true },
         isPresent: { type: Boolean, default: false },
@@ -54,13 +54,16 @@ export class Lesson {
         markedBy: { type: Types.ObjectId, ref: 'Teacher' }
     }])
     attendance: {
-        user: User;
+        user: Types.ObjectId;
         isPresent: boolean;
         lessonGrade?: number;
         notes?: string;
         markedAt: Date;
-        markedBy: Teacher;
+        markedBy: Types.ObjectId;
     }[];
+
+    @Prop({ default: 0, min: 1 })
+    order: number; // ДОБАВЛЕНО: порядок урока
 
     @Prop({ default: true })
     isActive: boolean;

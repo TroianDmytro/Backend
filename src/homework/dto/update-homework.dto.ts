@@ -1,8 +1,7 @@
 // src/homework/dto/update-homework.dto.ts
-import { PartialType } from '@nestjs/swagger';
-import { CreateHomeworkDto } from './create-homework.dto';
+import { ApiProperty, PartialType } from '@nestjs/swagger';
 import { IsBoolean, IsOptional } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { CreateHomeworkDto } from './create-homework.dto';
 
 export class UpdateHomeworkDto extends PartialType(CreateHomeworkDto) {
     @ApiProperty({

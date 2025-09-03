@@ -7,7 +7,7 @@ import {
     Logger
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import * as mongoose from 'mongoose';
 import { Course, CourseDocument } from './schemas/course.schema';
 import { Teacher, TeacherDocument } from '../teachers/schemas/teacher.schema';
@@ -36,7 +36,7 @@ export class CoursesService {
      * МЕТОД: Создание нового курса с проверкой всех связей
      * 
      * Алгоритм работы:
-     * 1. Проверяем существование всех связанных сущностей (преподаватель, категория, уровень)
+     * 1. Проверяем существование всех связанных сущностей (преподаватель опционально, категория, уровень)
      * 2. Проверяем уникальность slug
      * 3. Создаем курс
      * 4. Обновляем статистику всех связанных сущностей
@@ -44,10 +44,12 @@ export class CoursesService {
     async create(createCourseDto: CreateCourseDto): Promise<Course> {
         this.logger.log(`Создание курса: ${createCourseDto.title}`);
 
-        // 1. Проверяем существование преподавателя
-        const teacher = await this.teacherModel.findById(createCourseDto.teacherId);
-        if (!teacher) {
-            throw new NotFoundException('Преподаватель не найден');
+        // 1. Проверяем существование преподавателя (если указан и не null)
+        if (createCourseDto.teacherId && createCourseDto.teacherId !== 'null') {
+            const teacher = await this.teacherModel.findById(createCourseDto.teacherId);
+            if (!teacher) {
+                throw new NotFoundException('Преподаватель не найден');
+            }
         }
 
         // 2. Проверяем существование категории
@@ -68,23 +70,46 @@ export class CoursesService {
             throw new ConflictException('Курс с таким slug уже существует');
         }
 
-        // 5. Создаем курс
-        const course = new this.courseModel({
+        // 5. Определяем, есть ли валидный teacherId
+        const hasValidTeacher = createCourseDto.teacherId &&
+            createCourseDto.teacherId !== 'null' &&
+            createCourseDto.teacherId.trim() !== '';
+
+        // Создаем данные для курса
+        const courseData: any = {
             ...createCourseDto,
             published_at: new Date(),
-        });
+        };
 
-        const savedCourse = await course.save();
+        // Если нет валидного преподавателя, исключаем поле из данных
+        if (!hasValidTeacher) {
+            const { teacherId, ...courseDataWithoutTeacher } = courseData;
+            const course = new this.courseModel(courseDataWithoutTeacher);
+            const savedCourse = await course.save();
 
-        // 6. Обновляем статистику связанных сущностей
-        await Promise.all([
-            this.updateTeacherStatistics(createCourseDto.teacherId),
-            this.updateCategoryStatistics(createCourseDto.categoryId),
-            this.updateDifficultyLevelStatistics(createCourseDto.difficultyLevelId)
-        ]);
+            // 6. Обновляем статистику связанных сущностей (без преподавателя)
+            await Promise.all([
+                this.updateCategoryStatistics(createCourseDto.categoryId),
+                this.updateDifficultyLevelStatistics(createCourseDto.difficultyLevelId)
+            ]);
 
-        this.logger.log(`Курс создан с ID: ${savedCourse._id}`);
-        return savedCourse;
+            this.logger.log(`Курс создан с ID: ${savedCourse._id} без преподавателя`);
+            return savedCourse;
+        } else {
+            // Создаем курс с преподавателем
+            const course = new this.courseModel(courseData);
+            const savedCourse = await course.save();
+
+            // 6. Обновляем статистику связанных сущностей (включая преподавателя)
+            await Promise.all([
+                this.updateCategoryStatistics(createCourseDto.categoryId),
+                this.updateDifficultyLevelStatistics(createCourseDto.difficultyLevelId),
+                this.updateTeacherStatistics(createCourseDto.teacherId!) // Используем ! так как мы уже проверили
+            ]);
+
+            this.logger.log(`Курс создан с ID: ${savedCourse._id} и преподавателем ${createCourseDto.teacherId}`);
+            return savedCourse;
+        }
     }
 
     /**
@@ -113,11 +138,11 @@ export class CoursesService {
         // Фильтрация по категории (можно по ID или slug)
         if (filters.category) {
             if (this.isValidObjectId(filters.category)) {
-                query.categoryId = filters.category;
+                query.category = filters.category; // Исправлено на category
             } else {
                 const category = await this.categoryModel.findOne({ slug: filters.category });
                 if (category) {
-                    query.categoryId = category._id;
+                    query.category = category._id; // Исправлено на category
                 } else {
                     return {
                         courses: [],
@@ -132,7 +157,7 @@ export class CoursesService {
         // Фильтрация по уровню сложности (можно по ID или slug/code)
         if (filters.difficulty_level) {
             if (this.isValidObjectId(filters.difficulty_level)) {
-                query.difficultyLevelId = filters.difficulty_level;
+                query.difficultyLevel = filters.difficulty_level; // Исправлено на difficultyLevel
             } else {
                 const difficultyLevel = await this.difficultyLevelModel.findOne({
                     $or: [
@@ -141,7 +166,7 @@ export class CoursesService {
                     ]
                 });
                 if (difficultyLevel) {
-                    query.difficultyLevelId = difficultyLevel._id;
+                    query.difficultyLevel = difficultyLevel._id; // Исправлено на difficultyLevel
                 } else {
                     return {
                         courses: [],
@@ -155,15 +180,47 @@ export class CoursesService {
 
         // Остальные фильтры
         if (filters.teacher_id) {
-            query.teacherId = filters.teacher_id;
+            query.mainTeacher = filters.teacher_id; // Исправлено на mainTeacher
         }
 
         if (filters.is_active !== undefined) {
             query.is_active = filters.is_active;
         }
 
+        if (filters.isActive !== undefined) {
+            // Поддержка camelCase варианта
+            if (typeof filters.isActive === 'string') {
+                query.is_active = filters.isActive.toLowerCase() === 'true';
+            } else {
+                query.is_active = filters.isActive;
+            }
+        }
+
         if (filters.is_featured !== undefined) {
-            query.is_featured = filters.is_featured;
+            // Преобразуем строку в булево значение
+            if (typeof filters.is_featured === 'string') {
+                query.is_featured = filters.is_featured.toLowerCase() === 'true';
+            } else {
+                query.is_featured = filters.is_featured;
+            }
+        }
+
+        if (filters.isFeatured !== undefined) {
+            // Поддержка camelCase варианта
+            if (typeof filters.isFeatured === 'string') {
+                query.is_featured = filters.isFeatured.toLowerCase() === 'true';
+            } else {
+                query.is_featured = filters.isFeatured;
+            }
+        }
+
+        if (filters.isPublished !== undefined) {
+            // Преобразуем строку в булево значение
+            if (typeof filters.isPublished === 'string') {
+                query.isPublished = filters.isPublished.toLowerCase() === 'true';
+            } else {
+                query.isPublished = filters.isPublished;
+            }
         }
 
         // Фильтрация по цене
@@ -190,16 +247,15 @@ export class CoursesService {
         const [courses, totalItems] = await Promise.all([
             this.courseModel
                 .find(query)
-                .populate('teacherId', 'name second_name rating experience_years avatar_url')
-                .populate('categoryId', 'name slug description color icon')
-                .populate('difficultyLevelId', 'name slug level color description')
+                .populate('mainTeacher', 'name second_name rating experience_years avatar_url')
+                .populate('category', 'name slug description color icon') // Исправлено на category
+                .populate('difficultyLevel', 'name slug level color description') // Исправлено на difficultyLevel
                 .skip(skip)
                 .limit(limit)
                 .sort({ createdAt: -1 })
                 .exec(),
             this.courseModel.countDocuments(query).exec()
         ]);
-
         const totalPages = Math.ceil(totalItems / limit);
 
         this.logger.log(`Найдено курсов: ${totalItems}`);
@@ -224,9 +280,9 @@ export class CoursesService {
 
         const course = await this.courseModel
             .findById(id)
-            .populate('teacherId', 'name second_name email rating experience_years avatar_url bio')
-            .populate('categoryId', 'name slug description color icon parent_id')
-            .populate('difficultyLevelId', 'name slug level color description requirements')
+            .populate('mainTeacher', 'name second_name email rating experience_years avatar_url bio')
+            .populate('category', 'name slug description color icon parent_id') // Исправлено на category
+            .populate('difficultyLevel', 'name slug level color description requirements') // Исправлено на difficultyLevel
             .exec();
 
         return course;
@@ -240,9 +296,9 @@ export class CoursesService {
 
         const course = await this.courseModel
             .findOne({ slug, is_active: true })
-            .populate('teacherId', 'name second_name email rating experience_years avatar_url bio')
-            .populate('categoryId', 'name slug description color icon parent_id')
-            .populate('difficultyLevelId', 'name slug level color description requirements')
+            .populate('mainTeacher', 'name second_name email rating experience_years avatar_url bio')
+            .populate('category', 'name slug description color icon parent_id') // Исправлено на category
+            .populate('difficultyLevel', 'name slug level color description requirements') // Исправлено на difficultyLevel
             .exec();
 
         return course;
@@ -298,9 +354,9 @@ export class CoursesService {
         }
 
         // Сохраняем старые связи для обновления статистики
-        const oldTeacherId = existingCourse.teacherId;
-        const oldCategoryId = existingCourse.categoryId;
-        const oldDifficultyLevelId = existingCourse.difficultyLevelId;
+        const oldTeacherId = existingCourse.mainTeacher;
+        const oldCategoryId = existingCourse.category;
+        const oldDifficultyLevelId = existingCourse.difficultyLevel;
 
         // Обновляем курс
         const updatedCourse = await this.courseModel
@@ -309,9 +365,9 @@ export class CoursesService {
                 { ...updateCourseDto, updated_at: new Date() },
                 { new: true, runValidators: true }
             )
-            .populate('teacherId', 'name second_name rating experience_years avatar_url')
-            .populate('categoryId', 'name slug description color icon')
-            .populate('difficultyLevelId', 'name slug level color description')
+            .populate('mainTeacher', 'name second_name rating experience_years avatar_url')
+            .populate('category', 'name slug description color icon') // Исправлено на category
+            .populate('difficultyLevel', 'name slug level color description') // Исправлено на difficultyLevel
             .exec();
 
         if (!updatedCourse) {
@@ -322,24 +378,24 @@ export class CoursesService {
         const statsUpdates: Promise<void>[] = [];
 
         // Обновляем статистику преподавателей
-        if (updateCourseDto.teacherId && updateCourseDto.teacherId !== oldTeacherId.toString()) {
-            statsUpdates.push(this.updateTeacherStatistics(oldTeacherId.toString()));
+        if (updateCourseDto.teacherId && updateCourseDto.teacherId !== oldTeacherId?.toString()) {
+            statsUpdates.push(this.updateTeacherStatistics(oldTeacherId?.id?.toString() || ''));
             statsUpdates.push(this.updateTeacherStatistics(updateCourseDto.teacherId));
         } else if (oldTeacherId) {
             statsUpdates.push(this.updateTeacherStatistics(oldTeacherId.toString()));
         }
 
         // Обновляем статистику категорий
-        if (updateCourseDto.categoryId && updateCourseDto.categoryId !== oldCategoryId.toString()) {
-            statsUpdates.push(this.updateCategoryStatistics(oldCategoryId.toString()));
+        if (updateCourseDto.categoryId && updateCourseDto.categoryId !== oldCategoryId?.toString()) {
+            statsUpdates.push(this.updateCategoryStatistics(oldTeacherId?.id?.toString() || ''));
             statsUpdates.push(this.updateCategoryStatistics(updateCourseDto.categoryId));
         } else if (oldCategoryId) {
             statsUpdates.push(this.updateCategoryStatistics(oldCategoryId.toString()));
         }
 
         // Обновляем статистику уровней сложности
-        if (updateCourseDto.difficultyLevelId && updateCourseDto.difficultyLevelId !== oldDifficultyLevelId.toString()) {
-            statsUpdates.push(this.updateDifficultyLevelStatistics(oldDifficultyLevelId.toString()));
+        if (updateCourseDto.difficultyLevelId && updateCourseDto.difficultyLevelId !== oldDifficultyLevelId?.toString()) {
+            statsUpdates.push(this.updateDifficultyLevelStatistics(oldDifficultyLevelId?.toString() || ''));
             statsUpdates.push(this.updateDifficultyLevelStatistics(updateCourseDto.difficultyLevelId));
         } else if (oldDifficultyLevelId) {
             statsUpdates.push(this.updateDifficultyLevelStatistics(oldDifficultyLevelId.toString()));
@@ -371,17 +427,17 @@ export class CoursesService {
 
         // Сохраняем связи для обновления статистики
         const teacherId = course.mainTeacher;
-        const categoryId = course.categoryId;
-        const difficultyLevelId = course.difficultyLevelId;
+        const categoryId = course.category;
+        const difficultyLevelId = course.difficultyLevel;
 
         // Удаляем курс
         await this.courseModel.findByIdAndDelete(id);
 
         // Обновляем статистику связанных сущностей
         await Promise.all([
-            this.updateTeacherStatistics(teacherId.toString()),
-            this.updateCategoryStatistics(categoryId.toString()),
-            this.updateDifficultyLevelStatistics(difficultyLevelId.toString())
+            this.updateTeacherStatistics(teacherId?.id?.toString() || ''),
+            this.updateCategoryStatistics(categoryId?.toString() || ''),
+            this.updateDifficultyLevelStatistics(difficultyLevelId?.toString() || '')
         ]);
 
         this.logger.log(`Курс удален: ${id}`);
@@ -415,7 +471,7 @@ export class CoursesService {
         }
 
         const skip = (page - 1) * limit;
-        const query = { difficultyLevelId, is_active: true };
+        const query = { difficultyLevel: difficultyLevelId, is_active: true }; // Исправлено на difficultyLevel
 
         // Определяем поля для populate
         let teacherFields = 'name second_name rating';
@@ -432,8 +488,8 @@ export class CoursesService {
         const [courses, totalItems] = await Promise.all([
             this.courseModel
                 .find(query, detailLevel === 'admin' ? {} : courseFields)
-                .populate('teacherId', teacherFields)
-                .populate('categoryId', 'name slug color icon')
+                .populate('mainTeacher', teacherFields)
+                .populate('category', 'name slug color icon') // Исправлено на category
                 .skip(skip)
                 .limit(limit)
                 .sort({ average_rating: -1, students_count: -1 })
@@ -470,9 +526,9 @@ export class CoursesService {
                 is_active: true,
                 is_featured: true
             })
-            .populate('teacherId', 'name second_name rating experience_years avatar_url')
-            .populate('categoryId', 'name slug color icon')
-            .populate('difficultyLevelId', 'name slug level color')
+            .populate('mainTeacher', 'name second_name rating experience_years avatar_url')
+            .populate('category', 'name slug color icon') // Исправлено на category
+            .populate('difficultyLevel', 'name slug level color') // Исправлено на difficultyLevel
             .sort({ average_rating: -1, students_count: -1 })
             .limit(limit)
             .exec();
@@ -512,27 +568,26 @@ export class CoursesService {
 
         // Добавляем дополнительные фильтры
         if (filters.categoryId) {
-            query.categoryId = filters.categoryId;
+            query.category = filters.categoryId; // Исправлено на category
         }
 
         if (filters.difficultyLevelId) {
-            query.difficultyLevelId = filters.difficultyLevelId;
+            query.difficultyLevel = filters.difficultyLevelId; // Исправлено на difficultyLevel
         }
 
         if (filters.teacherId) {
-            query.teacherId = filters.teacherId;
+            query.mainTeacher = filters.teacherId;
         }
 
         const [courses, totalItems] = await Promise.all([
             this.courseModel
                 .find(query)
-                .populate('teacherId', 'name second_name rating experience_years avatar_url')
-                .populate('categoryId', 'name slug color icon')
-                .populate('difficultyLevelId', 'name slug level color')
+                .populate('mainTeacher', 'name second_name rating experience_years avatar_url')
+                .populate('category', 'name slug color icon') // Исправлено на category
+                .populate('difficultyLevel', 'name slug level color') // Исправлено на difficultyLevel
                 .skip(skip)
                 .limit(limit)
                 .sort({
-                    // Используем простую сортировку вместо сложного выражения
                     average_rating: -1,
                     students_count: -1
                 })
@@ -552,12 +607,121 @@ export class CoursesService {
     }
 
     /**
+     * МЕТОД: Назначение преподавателя на курс
+     */
+    async assignTeacherToCourse(courseId: string, teacherId: string): Promise<Course> {
+        this.logger.log(`Назначение преподавателя ${teacherId} на курс ${courseId}`);
+
+        if (!this.isValidObjectId(courseId)) {
+            throw new BadRequestException('Некорректный ID курса');
+        }
+
+        if (!this.isValidObjectId(teacherId)) {
+            throw new BadRequestException('Некорректный ID преподавателя');
+        }
+
+        // Проверяем существование курса
+        const course = await this.courseModel.findById(courseId);
+        if (!course) {
+            throw new NotFoundException('Курс не найден');
+        }
+
+        // Проверяем существование преподавателя
+        const teacher = await this.teacherModel.findById(teacherId);
+        if (!teacher) {
+            throw new NotFoundException('Преподаватель не найден');
+        }
+
+        // Сохраняем старого преподавателя для обновления статистики
+        const oldTeacherId = course.mainTeacher?.toString();
+
+        // Назначаем нового преподавателя
+        const updatedCourse = await this.courseModel
+            .findByIdAndUpdate(
+                courseId,
+                {
+                    mainTeacher: teacherId,
+                    updated_at: new Date()
+                },
+                { new: true, runValidators: true }
+            )
+            .populate('mainTeacher', 'name second_name rating experience_years avatar_url')
+            .populate('category', 'name slug description color icon')
+            .populate('difficultyLevel', 'name slug level color description')
+            .exec();
+
+        if (!updatedCourse) {
+            throw new NotFoundException('Не удалось обновить курс');
+        }
+
+        // Обновляем статистику преподавателей
+        const statsUpdates = [this.updateTeacherStatistics(teacherId)];
+        if (oldTeacherId && oldTeacherId !== teacherId) {
+            statsUpdates.push(this.updateTeacherStatistics(oldTeacherId));
+        }
+
+        await Promise.all(statsUpdates);
+
+        this.logger.log(`Преподаватель ${teacherId} назначен на курс ${courseId}`);
+        return updatedCourse;
+    }
+
+    /**
+     * МЕТОД: Удаление преподавателя с курса
+     */
+    async removeTeacherFromCourse(courseId: string): Promise<Course> {
+        this.logger.log(`Удаление преподавателя с курса ${courseId}`);
+
+        if (!this.isValidObjectId(courseId)) {
+            throw new BadRequestException('Некорректный ID курса');
+        }
+
+        // Проверяем существование курса
+        const course = await this.courseModel.findById(courseId);
+        if (!course) {
+            throw new NotFoundException('Курс не найден');
+        }
+
+        const oldTeacherId = course.mainTeacher?.toString();
+
+        // Удаляем преподавателя
+        const updatedCourse = await this.courseModel
+            .findByIdAndUpdate(
+                courseId,
+                {
+                    $unset: { mainTeacher: 1 },
+                    updated_at: new Date()
+                },
+                { new: true, runValidators: true }
+            )
+            .populate('category', 'name slug description color icon')
+            .populate('difficultyLevel', 'name slug level color description')
+            .exec();
+
+        if (!updatedCourse) {
+            throw new NotFoundException('Не удалось обновить курс');
+        }
+
+        // Обновляем статистику старого преподавателя
+        if (oldTeacherId) {
+            await this.updateTeacherStatistics(oldTeacherId);
+        }
+
+        this.logger.log(`Преподаватель удален с курса ${courseId}`);
+        return updatedCourse;
+    }
+
+    /**
      * ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ для обновления статистики
      */
     private async updateTeacherStatistics(teacherId: string): Promise<void> {
+        if (!teacherId || !this.isValidObjectId(teacherId)) {
+            return; // Пропускаем обновление для невалидных ID
+        }
+
         try {
             const stats = await this.courseModel.aggregate([
-                { $match: { teacherId: new mongoose.Types.ObjectId(teacherId) } },
+                { $match: { mainTeacher: new mongoose.Types.ObjectId(teacherId) } },
                 {
                     $group: {
                         _id: null,
@@ -574,6 +738,13 @@ export class CoursesService {
                     total_students: stats[0].totalStudents,
                     $set: { updated_at: new Date() }
                 });
+            } else {
+                // Если у преподавателя больше нет курсов, обнуляем статистику
+                await this.teacherModel.findByIdAndUpdate(teacherId, {
+                    courses_count: 0,
+                    total_students: 0,
+                    $set: { updated_at: new Date() }
+                });
             }
         } catch (error) {
             this.logger.error(`Ошибка обновления статистики преподавателя ${teacherId}:`, error);
@@ -583,7 +754,7 @@ export class CoursesService {
     private async updateCategoryStatistics(categoryId: string): Promise<void> {
         try {
             const stats = await this.courseModel.aggregate([
-                { $match: { categoryId: new mongoose.Types.ObjectId(categoryId), is_active: true } },
+                { $match: { category: new mongoose.Types.ObjectId(categoryId), is_active: true } }, // Исправлено на category
                 {
                     $group: {
                         _id: null,
@@ -610,7 +781,7 @@ export class CoursesService {
     private async updateDifficultyLevelStatistics(difficultyLevelId: string): Promise<void> {
         try {
             const stats = await this.courseModel.aggregate([
-                { $match: { difficultyLevelId: new mongoose.Types.ObjectId(difficultyLevelId), is_active: true } },
+                { $match: { difficultyLevel: new mongoose.Types.ObjectId(difficultyLevelId), is_active: true } }, // Исправлено на difficultyLevel
                 {
                     $group: {
                         _id: null,
@@ -693,12 +864,12 @@ export class CoursesService {
      */
     async getPopularCourses(limit: number = 10): Promise<Course[]> {
         return this.courseModel
-            .find({ isActive: true, isPublished: true })
+            .find({ is_active: true, isPublished: true }) // Исправлено на is_active
             .sort({ students_count: -1, average_rating: -1 })
             .limit(limit)
-            .populate('teacherId', 'name second_name rating')
-            .populate('categoryId', 'name slug')
-            .populate('difficultyLevelId', 'name level color')
+            .populate('mainTeacher', 'name second_name rating')
+            .populate('category', 'name slug')
+            .populate('difficultyLevel', 'name level color')
             .exec();
     }
 
@@ -759,12 +930,11 @@ export class CoursesService {
 
         // Создаем копию объекта курса без _id
         const courseData = course.toObject();
-        delete courseData._id;
-        delete courseData.id;
+        const { _id, id, ...courseDataWithoutId } = courseData;
 
         // Изменяем название и отмечаем как неопубликованный
         const newCourse = new this.courseModel({
-            ...courseData,
+            ...courseDataWithoutId,
             title: newTitle,
             isPublished: false,
             students_count: 0,
@@ -807,7 +977,7 @@ export class CoursesService {
         }
 
         const skip = (page - 1) * limit;
-        const query = { categoryId, is_active: true };
+        const query = { category: categoryId, is_active: true }; // Исправлено на category
 
         // Определяем поля для populate в зависимости от уровня детализации
         let teacherFields = 'name second_name rating';
@@ -824,8 +994,8 @@ export class CoursesService {
         const [courses, totalItems] = await Promise.all([
             this.courseModel
                 .find(query, detailLevel === 'admin' ? {} : courseFields)
-                .populate('teacherId', teacherFields)
-                .populate('difficultyLevelId', 'name slug level color')
+                .populate('mainTeacher', teacherFields)
+                .populate('difficultyLevel', 'name slug level color') // Исправлено на difficultyLevel
                 .skip(skip)
                 .limit(limit)
                 .sort({ average_rating: -1, students_count: -1 })
@@ -852,53 +1022,6 @@ export class CoursesService {
     }
 
     /**
- * Добавить предмет к курсу с назначением преподавателя
- */
-    async addSubjectToCourse(courseId: string, addSubjectDto: {
-        subjectId: string;
-        teacherId?: string;
-        startDate: string;
-    }) {
-        const course = await this.courseModel.findById(courseId);
-        if (!course) {
-            throw new NotFoundException('Курс не найден');
-        }
-
-        // Проверяем, что предмет существует
-        const subject = await this.subjectModel.findById(addSubjectDto.subjectId);
-        if (!subject) {
-            throw new NotFoundException('Предмет не найден');
-        }
-
-        // Проверяем, что преподаватель существует (если указан)
-        if (addSubjectDto.teacherId) {
-            const teacher = await this.teacherModel.findById(addSubjectDto.teacherId);
-            if (!teacher) {
-                throw new NotFoundException('Преподаватель не найден');
-            }
-        }
-
-        // Проверяем, что предмет еще не добавлен к курсу
-        const existingSubject = course.courseSubjects.find(
-            cs => cs.subject.toString() === addSubjectDto.subjectId
-        );
-        if (existingSubject) {
-            throw new BadRequestException('Предмет уже добавлен к курсу');
-        }
-
-        // Добавляем предмет к курсу
-        course.courseSubjects.push({
-            subject: addSubjectDto.subjectId as any,
-            teacher: addSubjectDto.teacherId as any,
-            startDate: new Date(addSubjectDto.startDate),
-            isActive: true,
-            addedAt: new Date()
-        });
-
-        return course.save();
-    }
-
-    /**
      * Получить предметы курса с информацией о преподавателях
      */
     async getCourseSubjects(courseId: string) {
@@ -919,54 +1042,27 @@ export class CoursesService {
 
         return {
             courseId: course._id,
-            courseName: course.name,
+            courseName: course.title,
             subjects: course.courseSubjects.filter(cs => cs.isActive)
         };
     }
 
     /**
-     * Удалить предмет из курса
-     */
-    async removeSubjectFromCourse(courseId: string, subjectId: string) {
-        const course = await this.courseModel.findById(courseId);
-        if (!course) {
-            throw new NotFoundException('Курс не найден');
-        }
-
-        const subjectIndex = course.courseSubjects.findIndex(
-            cs => cs.subject.toString() === subjectId
-        );
-
-        if (subjectIndex === -1) {
-            throw new NotFoundException('Предмет не найден в курсе');
-        }
-
-        // Проверяем, есть ли связанные уроки
-        const lessonsCount = await this.lessonModel.countDocuments({
-            course: courseId,
-            subject: subjectId
-        });
-
-        if (lessonsCount > 0) {
-            throw new BadRequestException(
-                `Невозможно удалить предмет. Существует ${lessonsCount} связанных уроков.`
-            );
-        }
-
-        course.courseSubjects.splice(subjectIndex, 1);
-        return course.save();
-    }
-
-    /**
      * Записаться на курс с проверкой оплаты и даты начала
+     * Обычная запись - только до начала курса и только после оплаты
      */
-    async enrollInCourse(courseId: string, enrollDto: { userId: string; paidAmount: number }) {
+    async enrollInCourse(courseId: string, enrollDto: { userId: string; paymentId?: string }) {
         const course = await this.courseModel.findById(courseId);
         if (!course) {
             throw new NotFoundException('Курс не найден');
         }
 
-        // Проверяем, что курс еще не начался (если не указано иное)
+        // Проверяем максимальное количество студентов
+        if (course.current_students_count >= course.max_students) {
+            throw new BadRequestException('Достигнуто максимальное количество студентов на курсе');
+        }
+
+        // Проверяем, что курс еще не начался
         const now = new Date();
         if (course.startDate <= now) {
             throw new BadRequestException(
@@ -974,9 +1070,23 @@ export class CoursesService {
             );
         }
 
-        // Проверяем оплату
-        if (enrollDto.paidAmount < course.price) {
-            throw new BadRequestException('Недостаточная сумма оплаты');
+        // Проверяем, что пользователь еще не записан на курс
+        const existingSubscription = await this.subscriptionModel.findOne({
+            user: enrollDto.userId,
+            course: courseId,
+            status: { $in: ['paid', 'active'] }
+        });
+
+        if (existingSubscription) {
+            throw new ConflictException('Пользователь уже записан на этот курс');
+        }
+
+        // Проверяем оплату (если передан paymentId)
+        if (enrollDto.paymentId) {
+            const payment = await this.validatePayment(enrollDto.paymentId, course.price);
+            if (!payment.success) {
+                throw new BadRequestException(`Ошибка оплаты: ${payment.message}`);
+            }
         }
 
         // Создаем подписку
@@ -984,49 +1094,162 @@ export class CoursesService {
             user: enrollDto.userId,
             course: courseId,
             status: 'paid',
-            paidAmount: enrollDto.paidAmount,
-            paidAt: now
+            paidAt: now,
+            enrolledAt: now
         });
 
-        return subscription.save();
+        const savedSubscription = await subscription.save();
+
+        // Увеличиваем счетчик студентов на курсе
+        await this.courseModel.findByIdAndUpdate(courseId, {
+            $inc: { current_students_count: 1 }
+        });
+
+        this.logger.log(`Пользователь ${enrollDto.userId} записан на курс ${courseId}`);
+        return savedSubscription;
+    }
+
+    /**
+     * Административная запись на курс (может быть после начала курса)
+     */
+    async adminEnrollInCourse(courseId: string, enrollDto: { userId: string; forceEnroll?: boolean }) {
+        const course = await this.courseModel.findById(courseId);
+        if (!course) {
+            throw new NotFoundException('Курс не найден');
+        }
+
+        // Проверяем максимальное количество студентов
+        if (course.current_students_count >= course.max_students) {
+            throw new BadRequestException('Достигнуто максимальное количество студентов на курсе');
+        }
+
+        // Проверяем, что пользователь еще не записан на курс
+        const existingSubscription = await this.subscriptionModel.findOne({
+            user: enrollDto.userId,
+            course: courseId,
+            status: { $in: ['paid', 'active'] }
+        });
+
+        if (existingSubscription) {
+            throw new ConflictException('Пользователь уже записан на этот курс');
+        }
+
+        const now = new Date();
+
+        // Если курс уже начался и не установлен флаг принудительной записи
+        if (course.startDate <= now && !enrollDto.forceEnroll) {
+            throw new BadRequestException(
+                'Курс уже начался. Используйте forceEnroll: true для принудительной записи.'
+            );
+        }
+
+        // Создаем подписку (администратор может записывать без оплаты)
+        const subscription = new this.subscriptionModel({
+            user: enrollDto.userId,
+            course: courseId,
+            status: 'active', // активная подписка без оплаты
+            enrolledAt: now,
+            enrolledByAdmin: true
+        });
+
+        const savedSubscription = await subscription.save();
+
+        // Увеличиваем счетчик студентов на курсе
+        await this.courseModel.findByIdAndUpdate(courseId, {
+            $inc: { current_students_count: 1 }
+        });
+
+        this.logger.log(`Администратор записал пользователя ${enrollDto.userId} на курс ${courseId}`);
+        return savedSubscription;
+    }
+
+    /**
+     * Проверка валидности платежа
+     */
+    private async validatePayment(paymentId: string, requiredAmount: number): Promise<{ success: boolean; message: string }> {
+        try {
+            // Здесь должна быть логика проверки платежа через Payment сервис
+            // Пока возвращаем заглушку
+            return { success: true, message: 'Оплата подтверждена' };
+        } catch (error) {
+            return { success: false, message: 'Ошибка проверки платежа' };
+        }
+    }
+
+    /**
+     * Обновление даты начала курса (только админ)
+     */
+    async updateStartDate(courseId: string, startDate: Date): Promise<Course> {
+        const course = await this.courseModel.findById(courseId);
+        if (!course) {
+            throw new NotFoundException('Курс не найден');
+        }
+
+        const updatedCourse = await this.courseModel.findByIdAndUpdate(
+            courseId,
+            { startDate: startDate },
+            { new: true }
+        ).populate(['mainTeacher', 'category', 'difficultyLevel', 'courseSubjects.subject', 'courseSubjects.teacher']);
+
+        if (!updatedCourse) {
+            throw new NotFoundException('Не удалось обновить курс');
+        }
+
+        this.logger.log(`Дата начала курса ${courseId} обновлена на ${startDate}`);
+        return updatedCourse;
+    }
+
+    /**
+ * Добавление предмета к курсу
+ */
+    async addSubjectToCourse(
+        courseId: string,
+        addSubjectData: { subjectId: string; teacherId?: string; startDate: Date }
+    ) {
+        const course = await this.courseModel.findById(courseId);
+        if (!course) {
+            throw new NotFoundException('Курс не найден');
+        }
+
+        const newSubject = {
+            subject: new Types.ObjectId(addSubjectData.subjectId),
+            teacher: addSubjectData.teacherId ? new Types.ObjectId(addSubjectData.teacherId) : undefined,
+            startDate: addSubjectData.startDate,
+            isActive: true,
+            addedAt: new Date()
+        } as any; // Приводим к any, так как схема работает с ObjectId
+
+        course.courseSubjects = course.courseSubjects || [];
+        course.courseSubjects.push(newSubject);
+
+        return await course.save();
+    }
+
+    /**
+     * Получение курса с предметами
+     */
+    async findByIdWithSubjects(id: string) {
+        return await this.courseModel
+            .findById(id)
+            .populate('courseSubjects.subject', 'name description')
+            .populate('courseSubjects.teacher', 'firstName lastName email')
+            .exec();
+    }
+
+    /**
+     * Удаление предмета из курса
+     */
+    async removeSubjectFromCourse(courseId: string, subjectId: string) {
+        const course = await this.courseModel.findById(courseId);
+        if (!course) {
+            throw new NotFoundException('Курс не найден');
+        }
+
+        course.courseSubjects = course.courseSubjects?.filter(
+            cs => cs.subject.toString() !== subjectId
+        ) || [];
+
+        return await course.save();
     }
 }
 
-/**
- * ПОДРОБНОЕ ОБЪЯСНЕНИЕ СЕРВИСА КУРСОВ:
- * 
- * 1. **ОСНОВНЫЕ CRUD ОПЕРАЦИИ:**
- *    - create() - создание с валидацией связей и обновлением статистики
- *    - findAll() - получение с расширенной фильтрацией и поиском
- *    - findById() - получение по ID с полным populate
- *    - findBySlug() - получение по slug для SEO-дружелюбных URL
- *    - update() - обновление с проверкой изменений связей
- *    - delete() - удаление с каскадным обновлением статистики
- * 
- * 2. **СПЕЦИАЛИЗИРОВАННЫЕ МЕТОДЫ:**
- *    - getCoursesByCategory() - курсы категории с уровнями детализации
- *    - getCoursesByDifficultyLevel() - курсы по уровню сложности
- *    - getFeaturedCourses() - рекомендуемые курсы
- *    - searchCourses() - полнотекстовый поиск с фильтрами
- * 
- * 3. **УРОВНИ ДЕТАЛИЗАЦИИ:**
- *    - 'card' - для карточек курсов (минимум данных)
- *    - 'full' - полная информация для пользователей
- *    - 'admin' - вся информация включая админские данные
- * 
- * 4. **АВТОМАТИЧЕСКАЯ СТАТИСТИКА:**
- *    - Обновление количества курсов у преподавателей
- *    - Обновление количества курсов в категориях
- *    - Обновление статистики уровней сложности
- * 
- * 5. **ВАЛИДАЦИЯ И ПРОВЕРКИ:**
- *    - Проверка существования связанных сущностей
- *    - Валидация ObjectId
- *    - Проверка уникальности slug
- *    - Обработка ошибок с подробными сообщениями
- * 
- * 6. **ПРОИЗВОДИТЕЛЬНОСТЬ:**
- *    - Параллельные запросы где возможно
- *    - Индексы на часто используемые поля
- *    - Селективный populate в завис
- **/

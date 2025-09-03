@@ -1,6 +1,11 @@
 // src/homework/dto/submit-homework.dto.ts
-import { IsMongoId, IsNotEmpty, IsString, IsOptional } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import {
+    IsNotEmpty,
+    IsString,
+    IsOptional,
+    IsMongoId,
+} from 'class-validator';
+import { ApiProperty } from "@nestjs/swagger";
 
 export class SubmitHomeworkDto {
     @ApiProperty({

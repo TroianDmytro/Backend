@@ -1,15 +1,21 @@
-import { ApiProperty } from "@nestjs/swagger";
-
 // src/homework/dto/homework-submission-response.dto.ts
+import {
+    IsString,
+    IsOptional,
+    IsNumber,
+    IsBoolean,
+    IsDateString,
+    Min,
+    Max
+} from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
+
 export class HomeworkSubmissionResponseDto {
     @ApiProperty({ example: '507f1f77bcf86cd799439011', description: 'ID отправки' })
     id: string;
 
     @ApiProperty({ example: '507f1f77bcf86cd799439012', description: 'ID задания' })
     homeworkId: string;
-
-    @ApiProperty({ example: '507f1f77bcf86cd799439013', description: 'ID урока' })
-    lessonId: string;
 
     @ApiProperty({ example: '507f1f77bcf86cd799439014', description: 'ID студента' })
     studentId: string;
@@ -87,4 +93,39 @@ export class HomeworkSubmissionResponseDto {
 
     @ApiProperty({ example: '2024-01-18T14:20:00Z', description: 'Дата обновления' })
     updatedAt: Date;
+    @ApiProperty({ description: 'Название задания' })
+    @IsString()
+    title: string;
+
+    @ApiProperty({ description: 'Описание задания' })
+    @IsString()
+    description: string;
+
+    @ApiProperty({ description: 'ID урока' })
+    @IsString()
+    lessonId: string;
+
+    // ✅ ДОБАВИТЬ НЕДОСТАЮЩИЕ ПОЛЯ:
+    @ApiProperty({ description: 'Крайний срок сдачи', required: false })
+    @IsOptional()
+    @IsDateString()
+    deadline?: string;
+
+    @ApiProperty({ description: 'Максимальный балл', required: false })
+    @IsOptional()
+    @IsNumber()
+    @Min(1)
+    @Max(100)
+    max_score?: number;
+
+    @ApiProperty({ description: 'Максимальное количество попыток', required: false })
+    @IsOptional()
+    @IsNumber()
+    @Min(1)
+    max_attempts?: number;
+
+    @ApiProperty({ description: 'Разрешить сдачу после дедлайна', required: false })
+    @IsOptional()
+    @IsBoolean()
+    allow_late_submission?: boolean;
 }

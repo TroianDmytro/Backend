@@ -2,15 +2,15 @@
 import {
     IsNotEmpty,
     IsString,
-    IsNumber,
     IsOptional,
-    IsArray,
-    ValidateNested,
+    IsNumber,
     Min,
     Max
 } from 'class-validator';
-import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
+
+import { Type } from 'class-transformer';
+import { ValidateNested, IsArray } from 'class-validator';
 
 export class DetailedFeedbackDto {
     @ApiProperty({ example: 'Качество кода', description: 'Критерий оценки' })

@@ -1,6 +1,6 @@
-import { ApiProperty } from "@nestjs/swagger";
-
 // src/homework/dto/homework-response.dto.ts
+import { ApiProperty } from '@nestjs/swagger';
+
 export class HomeworkResponseDto {
     @ApiProperty({ example: '507f1f77bcf86cd799439011', description: 'ID задания' })
     id: string;

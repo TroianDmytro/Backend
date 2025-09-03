@@ -12,7 +12,6 @@ import {
     Request,
     Logger,
     NotFoundException,
-    BadRequestException,
     ForbiddenException
 } from '@nestjs/common';
 import {
@@ -28,13 +27,13 @@ import { CoursesService } from './courses.service';
 import { CreateCourseDto } from './dto/create-course.dto';
 import { UpdateCourseDto } from './dto/update-course.dto';
 import { CourseResponseDto } from './dto/course-response.dto';
-import { CourseFilterDto } from './dto/course-filter.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 import { TeachersService } from 'src/teachers/teachers.service';
 import { DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
-import { GetUser } from 'src/auth/decorators/get-user.decorator';
+import { CourseFilterDto } from './dto/course-filter.dto';
 
 @ApiTags('courses')
 @Controller('courses')
@@ -211,7 +210,7 @@ export class CoursesController {
             throw new NotFoundException('Курс не найден');
         }
 
-        if (!isAdmin && course.mainTeacher.toString() !== currentUserId) {
+        if (!isAdmin && course.mainTeacher?.toString() !== currentUserId) {
             throw new ForbiddenException('У вас нет прав на редактирование этого курса');
         }
 
@@ -255,7 +254,7 @@ export class CoursesController {
             throw new NotFoundException('Курс не найден');
         }
 
-        if (!isAdmin && course.mainTeacher.toString() !== currentUserId) {
+        if (!isAdmin && course.mainTeacher?.toString() !== currentUserId) {
             throw new ForbiddenException('У вас нет прав на удаление этого курса');
         }
 
@@ -307,7 +306,7 @@ export class CoursesController {
         }
 
         // Проверка прав доступа
-        const isOwner = course.mainTeacher.toString() === currentUserId;
+        const isOwner = course.mainTeacher?.toString() === currentUserId;
 
         if (!isAdmin && !isOwner) {
             this.logger.warn(
@@ -855,7 +854,7 @@ export class CoursesController {
         @Body() addSubjectDto: {
             subjectId: string;
             teacherId?: string;
-            startDate: string;
+            startDate: Date;
         }
     ) {
         this.logger.log(`Добавление предмета ${addSubjectDto.subjectId} к курсу ${courseId}`);
@@ -893,17 +892,95 @@ export class CoursesController {
      * Записаться на курс (проверка оплаты и даты начала)
      */
     @Post(':id/enroll')
-    @ApiOperation({ summary: 'Записаться на курс' })
+    @ApiOperation({
+        summary: 'Записаться на курс',
+        description: 'Записывает пользователя на курс с проверкой оплаты и даты начала. Доступно только до начала курса и после оплаты.'
+    })
+    @ApiParam({ name: 'id', description: 'ID курса' })
     @ApiResponse({ status: 200, description: 'Успешная запись на курс' })
     @ApiResponse({ status: 400, description: 'Курс уже начался или не оплачен' })
+    @ApiResponse({ status: 409, description: 'Пользователь уже записан на курс' })
     async enrollInCourse(
         @Param('id') courseId: string,
-        @Body() enrollDto: { userId: string; paidAmount: number },
+        @Body() enrollDto: { paymentId?: string },
         @GetUser() currentUser: any
     ) {
-        //////////////
-        this.logger.log(`Запись пользователя ${enrollDto.userId} на курс ${courseId}`);
-        return this.coursesService.enrollInCourse(courseId, enrollDto);
+        this.logger.log(`Запись пользователя ${currentUser.userId} на курс ${courseId}`);
+
+        const result = await this.coursesService.enrollInCourse(courseId, {
+            userId: currentUser.userId,
+            paymentId: enrollDto.paymentId
+        });
+
+        return {
+            success: true,
+            message: 'Вы успешно записались на курс',
+            subscription: result
+        };
+    }
+
+    /**
+     * Административная запись на курс (может быть после начала курса)
+     */
+    @Post(':id/admin-enroll')
+    @UseGuards(RolesGuard)
+    @Roles('admin')
+    @ApiOperation({
+        summary: 'Административная запись на курс',
+        description: 'Записывает пользователя на курс в режиме администратора. Может быть выполнена даже после начала курса.'
+    })
+    @ApiParam({ name: 'id', description: 'ID курса' })
+    @ApiResponse({ status: 200, description: 'Успешная административная запись на курс' })
+    @ApiResponse({ status: 409, description: 'Пользователь уже записан на курс' })
+    async adminEnrollInCourse(
+        @Param('id') courseId: string,
+        @Body() enrollDto: { userId: string; forceEnroll?: boolean }
+    ) {
+        this.logger.log(`Административная запись пользователя ${enrollDto.userId} на курс ${courseId}`);
+
+        const result = await this.coursesService.adminEnrollInCourse(courseId, enrollDto);
+
+        return {
+            success: true,
+            message: 'Пользователь успешно записан на курс администратором',
+            subscription: result
+        };
+    }
+
+    /**
+     * Обновление даты начала курса (только админ)
+     */
+    @Put(':id/start-date')
+    @UseGuards(RolesGuard)
+    @Roles('admin')
+    @ApiOperation({
+        summary: 'Обновление даты начала курса',
+        description: 'Позволяет администратору изменить дату начала курса'
+    })
+    @ApiParam({ name: 'id', description: 'ID курса' })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                startDate: { type: 'string', format: 'date-time' }
+            },
+            required: ['startDate']
+        }
+    })
+    @ApiResponse({ status: 200, description: 'Дата начала курса успешно обновлена' })
+    async updateCourseStartDate(
+        @Param('id') courseId: string,
+        @Body('startDate') startDate: Date
+    ) {
+        this.logger.log(`Обновление даты начала курса ${courseId} на ${startDate}`);
+
+        const updatedCourse = await this.coursesService.updateStartDate(courseId, startDate);
+
+        return {
+            success: true,
+            message: 'Дата начала курса успешно обновлена',
+            course: updatedCourse
+        };
     }
 
 

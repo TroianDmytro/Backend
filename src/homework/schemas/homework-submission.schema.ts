@@ -10,8 +10,9 @@ export type HomeworkSubmissionDocument = HomeworkSubmission & Document;
 
 export enum SubmissionStatus {
     SUBMITTED = 'submitted',
-    GRADED = 'graded',
-    RETURNED = 'returned'
+    IN_REVIEW = 'in_review',
+    REVIEWED = 'reviewed',              
+    RETURNED_FOR_REVISION = 'returned_for_revision' 
 }
 
 @Schema({
@@ -24,33 +25,56 @@ export class HomeworkSubmission {
 
     @Prop({ type: Types.ObjectId, ref: 'Homework', required: true })
     @Type(() => Homework)
-    homework: Homework;
+    homework: Homework; // ИСПРАВЛЕНО: вместо homeworkId
 
     @Prop({ type: Types.ObjectId, ref: 'User', required: true })
     @Type(() => User)
-    student: User;
-
-    @Prop({ required: true })
-    fileUrl: string;
+    student: User; // ИСПРАВЛЕНО: вместо studentId
 
     @Prop({ enum: SubmissionStatus, default: SubmissionStatus.SUBMITTED })
     status: SubmissionStatus;
 
-    @Prop({ min: 1, max: 5 })
-    grade?: number;
+    @Prop([{
+        filename: { type: String, required: true },
+        originalName: { type: String, required: true },
+        mimeType: { type: String },
+        size: { type: Number },
+        url: { type: String, required: true }
+    }])
+    files: {
+        filename: string;
+        originalName: string;
+        mimeType?: string;
+        size?: number;
+        url: string;
+    }[]; // ДОБАВЛЕНО
 
-    @Prop({ trim: true })
-    feedback?: string;
+    @Prop({ min: 0 })
+    score?: number; // ДОБАВЛЕНО
 
     @Prop()
-    gradedAt?: Date;
+    teacher_comment?: string; // ДОБАВЛЕНО
+
+    @Prop()
+    detailed_feedback?: string; // ДОБАВЛЕНО
 
     @Prop({ type: Types.ObjectId, ref: 'Teacher' })
-    @Type(() => Teacher)
-    gradedBy?: Teacher;
+    reviewed_by?: Teacher; // ДОБАВЛЕНО
+
+    @Prop()
+    reviewed_at?: Date; // ДОБАВЛЕНО
+
+    @Prop({ default: false })
+    is_late?: boolean; // ДОБАВЛЕНО
+
+    @Prop({ default: Date.now })
+    submitted_at: Date;
 
     createdAt: Date;
     updatedAt: Date;
 }
 
 export const HomeworkSubmissionSchema = SchemaFactory.createForClass(HomeworkSubmission);
+
+HomeworkSubmissionSchema.index({ homework: 1, student: 1 }, { unique: true });
+HomeworkSubmissionSchema.index({ status: 1 });

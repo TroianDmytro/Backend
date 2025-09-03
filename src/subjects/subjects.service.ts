@@ -144,12 +144,10 @@ export class SubjectsService {
     async removeStudyMaterial(subjectId: string, materialId: string): Promise<SubjectDocument> {
         const subject = await this.findById(subjectId);
 
-        // ИСПРАВЛЕНО: правильный поиск по строковому ID
-        const materialIndex = subject.studyMaterials.findIndex(
-            material => material._id?.toString() === materialId
-        );
-
-        if (materialIndex === -1) {
+        // ИСПРАВЛЕНО: поиск по индексу, так как у материалов нет _id
+        const materialIndex = parseInt(materialId);
+        
+        if (materialIndex < 0 || materialIndex >= subject.studyMaterials.length) {
             throw new NotFoundException('Учебный материал не найден');
         }
 

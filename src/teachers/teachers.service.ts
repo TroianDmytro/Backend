@@ -326,7 +326,7 @@ export class TeachersService {
 
         // Фильтруем и обрабатываем курсы
         const activeCourses = (teacher.assignedCourses as CourseDocument[]).filter(
-            course => course.is_active && course.isPublished
+            course => course.isActive && course.isPublished
         );
 
         return activeCourses;

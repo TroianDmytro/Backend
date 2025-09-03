@@ -12,7 +12,8 @@ export enum SubscriptionStatus {
     PAID = 'paid',           // Оплачен, но курс еще не начался
     ACTIVE = 'active',       // Активная подписка (курс идет)
     COMPLETED = 'completed', // Курс завершен
-    CANCELLED = 'cancelled'  // Отменен
+    CANCELLED = 'cancelled', // Отменен
+    EXPIRED = 'expired'      // Истек
 }
 
 @Schema({
@@ -35,10 +36,50 @@ export class Subscription {
     status: SubscriptionStatus;
 
     @Prop({ required: true, min: 0 })
+    price: number; // ДОБАВЛЕНО
+
+    @Prop({ required: true, min: 0 })
     paidAmount: number;
 
     @Prop()
     paidAt?: Date;
+
+    // ДОБАВЛЕНО: дополнительные поля
+    @Prop({ enum: ['monthly', 'quarterly', 'yearly', 'lifetime'] })
+    subscription_type?: string;
+
+    @Prop()
+    start_date?: Date;
+
+    @Prop()
+    end_date?: Date;
+
+    @Prop()
+    payment_transaction_id?: string;
+
+    @Prop()
+    payment_date?: Date;
+
+    @Prop()
+    payment_method?: string;
+
+    @Prop()
+    cancellation_reason?: string;
+
+    @Prop()
+    cancelled_at?: Date;
+
+    @Prop({ type: Types.ObjectId, ref: 'User' })
+    cancelled_by?: Types.ObjectId;
+
+    @Prop({ default: false })
+    auto_renewal?: boolean;
+
+    @Prop()
+    next_billing_date?: Date;
+
+    @Prop({ default: true })
+    email_notifications?: boolean;
 
     // НОВОЕ: проверка доступности записи
     @Prop({ default: false })

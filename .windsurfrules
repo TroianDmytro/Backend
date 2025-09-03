@@ -1,0 +1,24 @@
+# Windsurf AI Rules для образовательной платформы
+
+## Контекст проекта
+Образовательная платформа на NestJS с MongoDB, JWT/OAuth аутентификацией и системой ролей.
+
+## Архитектурные принципы
+- Модульная структура: каждый модуль содержит dto/, schemas/, service, controller, module
+- MongoDB схемы с timestamps и transform (_id → id)
+- Глобальная аутентификация через JwtAuthGuard с декораторами @Public() и @Roles()
+- Централизованная конфигурация в src/config/configuration.ts
+
+## Стандарты кодирования
+- class-validator для DTO с русскими сообщениями
+- @ApiProperty() для Swagger документации  
+- Types.ObjectId для ссылок с @Type(() => Class)
+- Специфичные NestJS исключения с русскими сообщениями
+
+## Ключевые особенности
+- CORS: origin: true (все домены разрешены)
+- Файлы: Multer + Sharp для изображений
+- Тестирование: /api/auth/test для OAuth, /api/docs для Swagger
+- База данных: retryWrites: true, w: 'majority'
+
+Следуйте паттернам из существующих модулей src/roles/, src/categories/ при разработке.

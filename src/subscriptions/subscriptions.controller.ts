@@ -34,6 +34,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { PaymentService } from '../payment/payment.service';
 import { GetUser } from 'src/auth/decorators/get-user.decorator';
+import { SubscriptionStatus } from './schemas/subscription.schema';
 
 @ApiTags('subscriptions')
 @Controller('subscriptions')
@@ -644,7 +645,7 @@ export class SubscriptionsController {
     async updateSubscriptionStatus(
         @Param('id') subscriptionId: string,
         @Body() statusDto: {
-            status: 'pending' | 'paid' | 'active' | 'completed' | 'cancelled';
+            status: SubscriptionStatus.ACTIVE | SubscriptionStatus.EXPIRED | SubscriptionStatus.CANCELLED | SubscriptionStatus.PENDING;
         }
     ) {
         this.logger.log(`Обновление статуса подписки ${subscriptionId}`);

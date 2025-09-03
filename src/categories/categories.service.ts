@@ -203,18 +203,18 @@ export class CategoriesService {
             short_description: course.short_description,
             logo_url: course.logo_url,
             price: course.price,
-            discount_price: course.price * (1 - course.discount_percent / 100),
+            discount_price: course.price * (1 - (course.discount_percent || 0) / 100),
             currency: course.currency,
             rating: course.rating,
             reviews_count: course.reviews_count,
             current_students_count: course.current_students_count,
             duration_hours: course.duration_hours,
             lessons_count: course.lessons_count,
-            difficulty_level: course.difficultyLevelId ? {
-                name: (course.difficultyLevelId as any).name,
-                slug: (course.difficultyLevelId as any).slug,
-                level: (course.difficultyLevelId as any).level,
-                color: (course.difficultyLevelId as any).color
+            difficulty_level: course.difficultyLevel? {
+                name: (course.difficultyLevel as any).name,
+                slug: (course.difficultyLevel as any).slug,
+                level: (course.difficultyLevel as any).level,
+                color: (course.difficultyLevel as any).color
             } : null,
             teacher: course.mainTeacher ? {
                 id: (course.mainTeacher as any).id,
@@ -317,7 +317,7 @@ export class CategoriesService {
             statistics: {
                 totalCourses: totalItems,
                 publishedCourses: courses.filter(c => c.isPublished).length,
-                activeCourses: courses.filter(c => c.is_active).length,
+                activeCourses: courses.filter(c => c.isActive).length,
                 totalStudents: courses.reduce((sum, c) => sum + (c.current_students_count || 0), 0),
                 averageRating: courses.reduce((sum, c) => sum + (c.rating || 0), 0) / courses.length || 0
             }

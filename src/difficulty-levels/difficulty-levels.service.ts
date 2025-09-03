@@ -280,24 +280,24 @@ export class DifficultyLevelsService {
             short_description: course.short_description,
             logo_url: course.logo_url,
             price: course.price,
-            discount_price: course.price * (1 - course.discount_percent / 100),
+            discount_price: course.price * (1 - (course.discount_percent || 0) / 100),
             currency: course.currency,
             rating: course.rating,
             reviews_count: course.reviews_count,
             current_students_count: course.current_students_count,
             duration_hours: course.duration_hours,
             lessons_count: course.lessons_count,
-            category: course.categoryId ? {
-                name: (course.categoryId as any).name,
-                slug: (course.categoryId as any).slug,
-                color: (course.categoryId as any).color,
-                icon: (course.categoryId as any).icon
+            category: course.category ? {
+                name: (course.category as any).name,
+                slug: (course.category as any).slug,
+                color: (course.category as any).color,
+                icon: (course.category as any).icon
             } : null,
-            teacher: course.teacherId ? {
-                id: (course.teacherId as any).id,
-                name: (course.teacherId as any).name,
-                second_name: (course.teacherId as any).second_name,
-                rating: (course.teacherId as any).rating
+            teacher: course.mainTeacher ? {
+                id: (course.mainTeacher as any).id,
+                name: (course.mainTeacher as any).name,
+                second_name: (course.mainTeacher as any).second_name,
+                rating: (course.mainTeacher as any).rating
             } : null
         }));
 
@@ -400,7 +400,7 @@ export class DifficultyLevelsService {
             statistics: {
                 totalCourses: totalItems,
                 publishedCourses: courses.filter(c => c.isPublished).length,
-                activeCourses: courses.filter(c => c.is_active).length,
+                activeCourses: courses.filter(c => c.isActive).length,
                 totalStudents: courses.reduce((sum, c) => sum + (c.current_students_count || 0), 0),
                 averageRating: courses.reduce((sum, c) => sum + (c.rating || 0), 0) / courses.length || 0
             }

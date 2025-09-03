@@ -23,6 +23,7 @@ import {
     ApiParam,
     ApiQuery,
     ApiConsumes,
+    ApiBody,
 } from '@nestjs/swagger';
 import { LessonsService } from './lessons.service';
 import { CreateLessonDto } from './dto/create-lesson.dto';
@@ -41,7 +42,9 @@ import { FileInterceptor } from '@nestjs/platform-express';
 export class LessonsController {
     private readonly logger = new Logger(LessonsController.name);
 
-    constructor(private readonly lessonsService: LessonsService) { }
+    constructor(private readonly lessonsService: LessonsService) {
+
+     }
 
     @Post()
     @UseGuards(JwtAuthGuard, RolesGuard)
@@ -316,95 +319,51 @@ export class LessonsController {
         return this.lessonsService.getLessonsByCourseAndSubject(courseId, subjectId, upcoming === 'true');
     }
 
-    // src/homework/homework.controller.ts - ДОБАВЛЯЕМ НОВЫЕ МЕТОДЫ К СУЩЕСТВУЮЩЕМУ КОНТРОЛЛЕРУ
-
     /**
-     * Создать домашнее задание (только преподаватель)
+     * Обновление даты и времени урока (только админ)
      */
-    @Post()
+    @Put(':id/schedule')
     @UseGuards(RolesGuard)
-    @Roles('teacher', 'admin')
-    @UseInterceptors(FileInterceptor('file'))
-    @ApiOperation({ summary: 'Создать домашнее задание с прикреплением PDF файла' })
-    @ApiConsumes('multipart/form-data')
-    @ApiResponse({ status: 201, description: 'Домашнее задание создано' })
-    async create(
-        @Body() createHomeworkDto: {
-            title: string;
-            description: string;
-            lessonId: string;
-            dueDate: string;
-        },
-        @UploadedFile() file: Express.Multer.File,
-        @GetUser() teacher: any
+    @Roles('admin')
+    @ApiOperation({ 
+        summary: 'Обновление даты и времени урока',
+        description: 'Позволяет администратору изменить дату и время проведения урока'
+    })
+    @ApiParam({ name: 'id', description: 'ID урока' })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                date: { type: 'string', format: 'date-time' },
+                startTime: { type: 'string', example: '10:00' },
+                endTime: { type: 'string', example: '11:30' }
+            }
+        }
+    })
+    @ApiResponse({ status: 200, description: 'Расписание урока успешно обновлено' })
+    async updateLessonSchedule(
+        @Param('id') lessonId: string,
+        @Body() scheduleData: {
+            date?: Date;
+            startTime?: string;
+            endTime?: string;
+        }
     ) {
-        this.logger.log(`Создание домашнего задания для урока ${createHomeworkDto.lessonId}`);
-        return this.homeworkService.create(createHomeworkDto, file, teacher._id);
-    }
+        this.logger.log(`Обновление расписания урока ${lessonId}`);
+        
+        // Временное решение - используем существующий метод update
+        const updatedLesson = await this.lessonsService.update(
+            lessonId, 
+            scheduleData as any, 
+            'admin-user-id', 
+            true
+        );
 
-    /**
-     * Отправить выполненное домашнее задание (студент)
-     */
-    @Post(':id/submit')
-    @UseGuards(RolesGuard)
-    @Roles('student')
-    @UseInterceptors(FileInterceptor('file'))
-    @ApiOperation({ summary: 'Отправить выполненное домашнее задание (ZIP файл)' })
-    @ApiConsumes('multipart/form-data')
-    @ApiResponse({ status: 200, description: 'Домашнее задание отправлено' })
-    async submitHomework(
-        @Param('id') homeworkId: string,
-        @UploadedFile() file: Express.Multer.File,
-        @GetUser() student: any
-    ) {
-        this.logger.log(`Отправка домашнего задания ${homeworkId} студентом ${student._id}`);
-        return this.homeworkService.submitHomework(homeworkId, file, student._id);
-    }
-
-    /**
-     * Оценить домашнее задание (преподаватель)
-     */
-    @Put('submissions/:submissionId/grade')
-    @UseGuards(RolesGuard)
-    @Roles('teacher', 'admin')
-    @ApiOperation({ summary: 'Оценить выполненное домашнее задание' })
-    @ApiResponse({ status: 200, description: 'Оценка выставлена' })
-    async gradeHomework(
-        @Param('submissionId') submissionId: string,
-        @Body() gradeDto: {
-            grade: number;
-            feedback?: string;
-        },
-        @GetUser() teacher: any
-    ) {
-        this.logger.log(`Оценивание домашнего задания ${submissionId} преподавателем ${teacher._id}`);
-        return this.homeworkService.gradeHomework(submissionId, gradeDto, teacher._id);
-    }
-
-    /**
-     * Получить все отправки домашнего задания (преподаватель)
-     */
-    @Get(':id/submissions')
-    @UseGuards(RolesGuard)
-    @Roles('teacher', 'admin')
-    @ApiOperation({ summary: 'Получить все отправки домашнего задания' })
-    @ApiResponse({ status: 200, description: 'Список отправок домашнего задания' })
-    async getSubmissions(@Param('id') homeworkId: string) {
-        this.logger.log(`Получение отправок для домашнего задания ${homeworkId}`);
-        return this.homeworkService.getSubmissions(homeworkId);
-    }
-
-    /**
-     * Получить домашние задания студента
-     */
-    @Get('student/my-homework')
-    @UseGuards(RolesGuard)
-    @Roles('student')
-    @ApiOperation({ summary: 'Получить домашние задания студента' })
-    @ApiResponse({ status: 200, description: 'Список домашних заданий студента' })
-    async getStudentHomework(@GetUser() student: any) {
-        this.logger.log(`Получение домашних заданий для студента ${student._id}`);
-        return this.homeworkService.getStudentHomework(student._id);
+        return {
+            success: true,
+            message: 'Расписание урока успешно обновлено',
+            lesson: updatedLesson
+        };
     }
 
 }

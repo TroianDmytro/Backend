@@ -143,9 +143,9 @@ export class HomeworkController {
                 files: hw.files.map((file, index) => ({
                     id: index,
                     filename: file.filename,
-                    original_name: file.original_name,
-                    size_bytes: file.size_bytes,
-                    uploaded_at: file.uploaded_at
+                    original_name: file.originalName,
+                    size_bytes: file.size,
+                    uploaded_at: new Date() // Используем текущую дату, так как поле не существует
                 })),
                 createdAt: hw.createdAt
             })),
@@ -428,95 +428,5 @@ export class HomeworkController {
             this.logger.error(`Ошибка скачивания файла: ${error.message}`);
             throw error;
         }
-    }
-
-    /**
- * Создать домашнее задание (только преподаватель)
- */
-    @Post()
-    @UseGuards(RolesGuard)
-    @Roles('teacher', 'admin')
-    @UseInterceptors(FileInterceptor('file'))
-    @ApiOperation({ summary: 'Создать домашнее задание с прикреплением PDF файла' })
-    @ApiConsumes('multipart/form-data')
-    @ApiResponse({ status: 201, description: 'Домашнее задание создано' })
-    async create(
-        @Body() createHomeworkDto: {
-            title: string;
-            description: string;
-            lessonId: string;
-            dueDate: string;
-        },
-        @UploadedFile() file: Express.Multer.File,
-        @GetUser() teacher: any
-    ) {
-        this.logger.log(`Создание домашнего задания для урока ${createHomeworkDto.lessonId}`);
-        return this.homeworkService.create(createHomeworkDto, file, teacher._id);
-    }
-
-    /**
-     * Отправить выполненное домашнее задание (студент)
-     */
-    @Post(':id/submit')
-    @UseGuards(RolesGuard)
-    @Roles('student')
-    @UseInterceptors(FileInterceptor('file'))
-    @ApiOperation({ summary: 'Отправить выполненное домашнее задание (ZIP файл)' })
-    @ApiConsumes('multipart/form-data')
-    @ApiResponse({ status: 200, description: 'Домашнее задание отправлено' })
-    async submitHomework(
-        @Param('id') homeworkId: string,
-        @UploadedFile() file: Express.Multer.File,
-        @GetUser() student: any
-    ) {
-        ///////////////
-        this.logger.log(`Отправка домашнего задания ${homeworkId} студентом ${student._id}`);
-        return this.homeworkService.submitHomework(homeworkId, file, student._id);
-    }
-
-    /**
-     * Оценить домашнее задание (преподаватель)
-     */
-    @Put('submissions/:submissionId/grade')
-    @UseGuards(RolesGuard)
-    @Roles('teacher', 'admin')
-    @ApiOperation({ summary: 'Оценить выполненное домашнее задание' })
-    @ApiResponse({ status: 200, description: 'Оценка выставлена' })
-    async gradeHomework(
-        @Param('submissionId') submissionId: string,
-        @Body() gradeDto: {
-            grade: number;
-            feedback?: string;
-        },
-        @GetUser() teacher: any
-    ) {
-        this.logger.log(`Оценивание домашнего задания ${submissionId} преподавателем ${teacher._id}`);
-        return this.homeworkService.gradeHomework(submissionId, gradeDto, teacher._id);
-    }
-
-    /**
-     * Получить все отправки домашнего задания (преподаватель)
-     */
-    @Get(':id/submissions')
-    @UseGuards(RolesGuard)
-    @Roles('teacher', 'admin')
-    @ApiOperation({ summary: 'Получить все отправки домашнего задания' })
-    @ApiResponse({ status: 200, description: 'Список отправок домашнего задания' })
-    async getSubmissions(@Param('id') homeworkId: string) {
-        this.logger.log(`Получение отправок для домашнего задания ${homeworkId}`);
-        return this.homeworkService.getSubmissions(homeworkId);
-    }
-
-    /**
-     * Получить домашние задания студента
-     */
-    @Get('student/my-homework')
-    @UseGuards(RolesGuard)
-    @Roles('student')
-    @ApiOperation({ summary: 'Получить домашние задания студента' })
-    @ApiResponse({ status: 200, description: 'Список домашних заданий студента' })
-    async getStudentHomework(@GetUser() student: any) {
-        this.logger.log(`Получение домашних заданий для студента ${student._id}`);
-        return this.homeworkService.getStudentHomework(student._id);
     }
 }

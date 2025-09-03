@@ -22,7 +22,7 @@ export class Subject {
     @Prop({ default: true })
     isActive: boolean;
 
-    // Учебные материалы для предмета
+    // НОВОЕ: Учебные материалы для предмета
     @Prop([{
         title: { type: String, required: true },
         description: { type: String },

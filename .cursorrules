@@ -1,0 +1,28 @@
+# Правила для Cursor AI
+
+Вы работаете с образовательной платформой на NestJS. Следуйте этим правилам:
+
+## Архитектура
+- Модульная структура NestJS с MongoDB через Mongoose
+- JWT + Google OAuth аутентификация
+- Система ролей через decorators (@Roles, @Public)
+- Файловые загрузки через Multer + Sharp
+
+## Паттерны кодирования
+- Все схемы MongoDB с timestamps: true и transform для _id → id
+- DTO с class-validator и русскими сообщениями об ошибках
+- @ApiProperty() для Swagger документации
+- Ссылки через Types.ObjectId с ref и @Type(() => Class)
+
+## Конфигурация
+- Все настройки в src/config/configuration.ts с fallback значениями
+- ConfigService.get<Type>('path.to.config') для доступа к конфигу
+- Глобальный JwtAuthGuard в app.module.ts
+
+## Специфика проекта
+- CORS разрешен для всех доменов (origin: true)
+- Swagger на /api/docs, OAuth тестирование на /api/auth/test
+- Русские сообщения об ошибках
+- Логирование подключений MongoDB
+
+Всегда используйте существующие паттерны из модулей src/roles/ или src/categories/ при создании новых модулей.

@@ -44,7 +44,7 @@ export class SubscriptionsService {
                 throw new NotFoundException(`Курс с ID ${courseId} не найден`);
             }
 
-            if (!course.isPublished || !course.is_active) {
+            if (!course.isPublished || !course.isActive) {
                 throw new BadRequestException('Курс недоступен для подписки');
             }
 
@@ -259,12 +259,12 @@ export class SubscriptionsService {
             throw new BadRequestException('У вас нет прав на отмену этой подписки');
         }
 
-        if (subscription.status === 'cancelled') {
+        if (subscription.status === SubscriptionStatus.CANCELLED) {
             throw new ConflictException('Подписка уже отменена');
         }
 
         // Отменяем подписку
-        subscription.status = 'cancelled';
+        subscription.status = SubscriptionStatus.CANCELLED;
         subscription.cancellation_reason = reason;
         subscription.cancelled_at = new Date();
         subscription.cancelled_by = userId as any;
@@ -339,13 +339,13 @@ export class SubscriptionsService {
         };
 
         const monthsToAdd = periodMap[period];
-        const newEndDate = new Date(subscription.end_date);
+        const newEndDate = new Date(subscription.end_date!);
         newEndDate.setMonth(newEndDate.getMonth() + monthsToAdd);
 
         // Обновляем подписку
         subscription.end_date = newEndDate;
         subscription.auto_renewal = autoRenewal;
-        subscription.status = 'active';
+        subscription.status = SubscriptionStatus.ACTIVE;
 
         if (autoRenewal) {
             const nextBillingDate = new Date(newEndDate);
@@ -377,7 +377,7 @@ export class SubscriptionsService {
         }
 
         // Активируем подписку
-        subscription.status = 'active';
+        subscription.status = SubscriptionStatus.ACTIVE;
         // subscription.status = true;
         subscription.payment_transaction_id = transactionId;
         subscription.payment_date = new Date();
@@ -524,7 +524,7 @@ export class SubscriptionsService {
 
         for (const subscription of expiredSubscriptions) {
             // Обновляем статус на истекший
-            subscription.status = 'expired';
+            subscription.status = SubscriptionStatus.EXPIRED;
             await subscription.save();
             expiredCount++;
 
@@ -567,7 +567,7 @@ export class SubscriptionsService {
                     await this.emailService.sendSubscriptionExpiringNotification(
                         user.email,
                         user.name,
-                        subscription.end_date
+                        subscription.end_date!
                     );
                 }
             } catch (error) {

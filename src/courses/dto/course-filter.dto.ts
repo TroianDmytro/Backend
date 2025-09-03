@@ -9,6 +9,7 @@ import {
     Min,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 
 export class CourseFilterDto {
     @ApiProperty({ example: 'Программирование', description: 'Категория для фильтрации', required: false })
@@ -30,12 +31,14 @@ export class CourseFilterDto {
     @IsNumber()
     @Min(0)
     @IsOptional()
+    @Transform(({ value }) => value ? Number(value) : undefined)
     minPrice?: number;
 
     @ApiProperty({ example: 500, description: 'Максимальная цена', required: false })
     @IsNumber()
     @Min(0)
     @IsOptional()
+    @Transform(({ value }) => value ? Number(value) : undefined)
     maxPrice?: number;
 
     @ApiProperty({ example: 'ru', description: 'Язык курса', required: false })
@@ -46,16 +49,37 @@ export class CourseFilterDto {
     @ApiProperty({ example: true, description: 'Только опубликованные курсы', required: false })
     @IsBoolean()
     @IsOptional()
+    @Transform(({ value }) => {
+        if (value === undefined || value === null) return undefined;
+        if (typeof value === 'string') {
+            return value.toLowerCase() === 'true';
+        }
+        return Boolean(value);
+    })
     isPublished?: boolean;
 
     @ApiProperty({ example: true, description: 'Только активные курсы', required: false })
     @IsBoolean()
     @IsOptional()
+    @Transform(({ value }) => {
+        if (value === undefined || value === null) return undefined;
+        if (typeof value === 'string') {
+            return value.toLowerCase() === 'true';
+        }
+        return Boolean(value);
+    })
     isActive?: boolean;
 
     @ApiProperty({ example: true, description: 'Только рекомендуемые курсы', required: false })
     @IsBoolean()
     @IsOptional()
+    @Transform(({ value }) => {
+        if (value === undefined || value === null) return undefined;
+        if (typeof value === 'string') {
+            return value.toLowerCase() === 'true';
+        }
+        return Boolean(value);
+    })
     isFeatured?: boolean;
 
     @ApiProperty({ example: 'JavaScript', description: 'Поиск по тегам', required: false })

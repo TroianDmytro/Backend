@@ -1,7 +1,7 @@
 // src/lessons/lessons.service.ts - ДОПОЛНЕНИЯ для работы с домашними заданиями
 import { Injectable, NotFoundException, ConflictException, Logger, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Lesson, LessonDocument } from './schemas/lesson.schema';
 import { Course, CourseDocument } from '../courses/schemas/course.schema';
 import { UpdateLessonDto } from './dto/update-lesson.dto';
@@ -38,7 +38,7 @@ export class LessonsService {
      * Получение урока по ID с домашними заданиями
      */
     async findById(id: string, includeHomeworks = false): Promise<LessonDocument | null> {
-        let query = this.lessonModel.findById(id).populate('courseId', 'title teacherId');
+        let query = this.lessonModel.findById(id).populate('course', 'title mainTeacher');
 
         if (includeHomeworks) {
             query = query.populate({
@@ -55,7 +55,7 @@ export class LessonsService {
      * Обновление урока
      */
     async update(id: string, updateLessonDto: UpdateLessonDto, userId: string, isAdmin: boolean): Promise<LessonDocument> {
-        const lesson = await this.lessonModel.findById(id).populate('courseId').exec();
+        const lesson = await this.lessonModel.findById(id).populate('course').exec();
         if (!lesson) {
             throw new NotFoundException(`Урок с ID ${id} не найден`);
         }
@@ -70,7 +70,7 @@ export class LessonsService {
         // Если меняется порядковый номер, проверяем уникальность
         if (updateLessonDto.order && updateLessonDto.order !== lesson.order) {
             const existingLesson = await this.lessonModel.findOne({
-                courseId: lesson.course,
+                course: lesson.course,
                 order: updateLessonDto.order,
                 _id: { $ne: id }
             }).exec();
@@ -92,7 +92,7 @@ export class LessonsService {
      * Удаление урока
      */
     async delete(id: string, userId: string, isAdmin: boolean): Promise<void> {
-        const lesson = await this.lessonModel.findById(id).populate('courseId').exec();
+        const lesson = await this.lessonModel.findById(id).populate('course').exec();
         if (!lesson) {
             throw new NotFoundException(`Урок с ID ${id} не найден`);
         }
@@ -121,7 +121,7 @@ export class LessonsService {
      * Обновление статуса публикации урока
      */
     async updatePublishStatus(id: string, isPublished: boolean, userId: string, isAdmin: boolean): Promise<LessonDocument> {
-        const lesson = await this.lessonModel.findById(id).populate('courseId').exec();
+        const lesson = await this.lessonModel.findById(id).populate('course').exec();
         if (!lesson) {
             throw new NotFoundException(`Урок с ID ${id} не найден`);
         }
@@ -150,7 +150,7 @@ export class LessonsService {
 
         return this.lessonModel
             .findOne({
-                courseId: currentLesson.courseId,
+                course: currentLesson.course,
                 order: { $gt: currentLesson.order },
                 isActive: true,
                 // isPublished: true
@@ -170,7 +170,7 @@ export class LessonsService {
 
         return this.lessonModel
             .findOne({
-                courseId: currentLesson.courseId,
+                course: currentLesson.course,
                 order: { $lt: currentLesson.order },
                 isActive: true,
                 // isPublished: true TODO
@@ -248,7 +248,7 @@ export class LessonsService {
      */
     private async updateCourseLessonsCount(courseId: string): Promise<void> {
         const lessonsCount = await this.lessonModel.countDocuments({
-            courseId,
+            course: courseId,
             isActive: true
         }).exec();
 
@@ -295,24 +295,21 @@ export class LessonsService {
         }
 
         const lessonData = originalLesson.toObject();
-        delete lessonData._id;
-        delete lessonData.id;
-        delete lessonData.createdAt;
-        delete lessonData.updatedAt;
+        const { _id, id, createdAt, updatedAt, ...lessonDataWithoutId } = lessonData;
 
         // Находим следующий доступный порядковый номер
-        const courseId = targetCourseId || originalLesson.courseId.toString();
+        const courseId = targetCourseId || originalLesson.course.toString();
         const maxOrder = await this.lessonModel
-            .findOne({ courseId })
+            .findOne({ course: courseId })
             .sort({ date: 1, startTime: 1 })
             .exec();
 
         const newOrder = maxOrder ? maxOrder.order + 1 : 1;
 
         const duplicatedLesson = new this.lessonModel({
-            ...lessonData,
+            ...lessonDataWithoutId,
             title: newTitle,
-            courseId: courseId,
+            course: courseId,
             order: newOrder,
             // isPublished: false,
             // Сбрасываем статистику домашних заданий
@@ -328,41 +325,6 @@ export class LessonsService {
 
         this.logger.log(`Урок ${originalId} дублирован как ${savedLesson.id}`);
         return savedLesson;
-    }
-    /**
- * Отметить посещаемость студентов на занятии
- */
-    async markAttendance(
-        lessonId: string,
-        attendanceData: {
-            userId: string;
-            isPresent: boolean;
-            lessonGrade?: number;
-            notes?: string;
-        }[],
-        teacherId: string
-    ) {
-        const lesson = await this.lessonModel.findById(lessonId);
-        if (!lesson) {
-            throw new NotFoundException('Занятие не найдено');
-        }
-
-        // Очищаем существующую посещаемость
-        lesson.attendance = [];
-
-        // Добавляем новые данные посещаемости
-        for (const attendance of attendanceData) {
-            lesson.attendance.push({
-                user: attendance.userId as any,
-                isPresent: attendance.isPresent,
-                lessonGrade: attendance.lessonGrade,
-                notes: attendance.notes,
-                markedAt: new Date(),
-                markedBy: teacherId as any
-            });
-        }
-
-        return lesson.save();
     }
 
     /**
@@ -441,7 +403,109 @@ export class LessonsService {
         const lesson = new this.lessonModel(createLessonDto);
         return lesson.save();
     }
+    /**
+     * Отметка посещаемости студентов
+     */
+    async markAttendance(
+        lessonId: string,
+        attendanceData: {
+            userId: string;
+            isPresent: boolean;
+            lessonGrade?: number;
+            notes?: string;
+        }[],
+        teacherId: string
+    ) {
+        const lesson = await this.lessonModel.findById(lessonId);
+        if (!lesson) {
+            throw new NotFoundException('Урок не найден');
+        }
 
+        // Инициализируем массив посещаемости если его нет
+        if (!lesson.attendance) {
+            lesson.attendance = [];
+        }
+
+        // Обновляем или добавляем записи о посещаемости
+        for (const data of attendanceData) {
+            const existingIndex = lesson.attendance.findIndex(
+                a => a.user.toString() === data.userId
+            );
+
+            const attendanceRecord = {
+                user: new Types.ObjectId(data.userId),
+                isPresent: data.isPresent,
+                lessonGrade: data.lessonGrade,
+                notes: data.notes,
+                markedAt: new Date(),
+                markedBy: new Types.ObjectId(teacherId)
+            };
+
+            if (existingIndex >= 0) {
+                lesson.attendance[existingIndex] = attendanceRecord;
+            } else {
+                lesson.attendance.push(attendanceRecord);
+            }
+        }
+
+        return await lesson.save();
+    }
+
+    /**
+ * Получение урока с данными о посещаемости
+ */
+    async findByIdWithAttendance(id: string) {
+        return await this.lessonModel
+            .findById(id)
+            .populate('teacher', 'firstName lastName')
+            .populate('subject', 'name')
+            .populate('course', 'title')
+            .populate('attendance.user', 'firstName lastName email')
+            .populate('attendance.markedBy', 'firstName lastName')
+            .exec();
+    }
+
+    /**
+     * Обновление расписания урока (только админ и преподаватель)
+     */
+    async updateSchedule(lessonId: string, scheduleData: {
+        date?: Date;
+        startTime?: string;
+        endTime?: string;
+    }): Promise<Lesson> {
+        const lesson = await this.lessonModel.findById(lessonId);
+        if (!lesson) {
+            throw new NotFoundException('Урок не найден');
+        }
+
+        // Проверяем корректность времени
+        if (scheduleData.startTime && scheduleData.endTime) {
+            const startTime = new Date(`1970-01-01T${scheduleData.startTime}:00`);
+            const endTime = new Date(`1970-01-01T${scheduleData.endTime}:00`);
+            
+            if (startTime >= endTime) {
+                throw new BadRequestException('Время начала должно быть раньше времени окончания');
+            }
+        }
+
+        const updateData: any = {};
+        if (scheduleData.date) updateData.date = scheduleData.date;
+        if (scheduleData.startTime) updateData.startTime = scheduleData.startTime;
+        if (scheduleData.endTime) updateData.endTime = scheduleData.endTime;
+
+        const updatedLesson = await this.lessonModel.findByIdAndUpdate(
+            lessonId,
+            updateData,
+            { new: true }
+        ).populate(['course', 'subject', 'teacher']);
+
+        if (!updatedLesson) {
+            throw new NotFoundException('Не удалось обновить урок');
+        }
+
+        this.logger.log(`Расписание урока ${lessonId} обновлено`);
+        return updatedLesson;
+    }
 }
 
 /**
