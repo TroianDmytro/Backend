@@ -1,18 +1,15 @@
-// src/homework/schemas/homework-submission.schema.ts
+// src/homework/schemas/homework-submission.schema.ts - ИСПРАВЛЕННАЯ СХЕМА
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
-import { Transform, Type } from 'class-transformer';
-import { Homework } from './homework.schema';
-import { User } from '../../users/schemas/user.schema';
-import { Teacher } from '../../teachers/schemas/teacher.schema';
 
 export type HomeworkSubmissionDocument = HomeworkSubmission & Document;
 
+// ИСПРАВЛЕНО: правильные статусы
 export enum SubmissionStatus {
     SUBMITTED = 'submitted',
     IN_REVIEW = 'in_review',
-    REVIEWED = 'reviewed',              
-    RETURNED_FOR_REVISION = 'returned_for_revision' 
+    REVIEWED = 'reviewed', // ИСПРАВЛЕНО: вместо 'graded'
+    RETURNED_FOR_REVISION = 'returned_for_revision'
 }
 
 @Schema({
@@ -20,20 +17,16 @@ export enum SubmissionStatus {
     collection: 'homework_submissions'
 })
 export class HomeworkSubmission {
-    @Transform(({ value }) => value.toString())
-    _id: Types.ObjectId;
-
     @Prop({ type: Types.ObjectId, ref: 'Homework', required: true })
-    @Type(() => Homework)
-    homework: Homework; // ИСПРАВЛЕНО: вместо homeworkId
+    homework: Types.ObjectId;
 
     @Prop({ type: Types.ObjectId, ref: 'User', required: true })
-    @Type(() => User)
-    student: User; // ИСПРАВЛЕНО: вместо studentId
+    student: Types.ObjectId;
 
     @Prop({ enum: SubmissionStatus, default: SubmissionStatus.SUBMITTED })
     status: SubmissionStatus;
 
+    // ИСПРАВЛЕНО: правильная структура файлов
     @Prop([{
         filename: { type: String, required: true },
         originalName: { type: String, required: true },
@@ -41,31 +34,31 @@ export class HomeworkSubmission {
         size: { type: Number },
         url: { type: String, required: true }
     }])
-    files: {
+    files: Array<{
         filename: string;
         originalName: string;
         mimeType?: string;
         size?: number;
         url: string;
-    }[]; // ДОБАВЛЕНО
+    }>;
 
-    @Prop({ min: 0 })
-    score?: number; // ДОБАВЛЕНО
-
-    @Prop()
-    teacher_comment?: string; // ДОБАВЛЕНО
+    @Prop({ min: 0, max: 100 })
+    score?: number;
 
     @Prop()
-    detailed_feedback?: string; // ДОБАВЛЕНО
+    teacher_comment?: string;
+
+    @Prop()
+    detailed_feedback?: string;
 
     @Prop({ type: Types.ObjectId, ref: 'Teacher' })
-    reviewed_by?: Teacher; // ДОБАВЛЕНО
+    reviewed_by?: Types.ObjectId;
 
     @Prop()
-    reviewed_at?: Date; // ДОБАВЛЕНО
+    reviewed_at?: Date;
 
     @Prop({ default: false })
-    is_late?: boolean; // ДОБАВЛЕНО
+    is_late?: boolean;
 
     @Prop({ default: Date.now })
     submitted_at: Date;
@@ -78,3 +71,4 @@ export const HomeworkSubmissionSchema = SchemaFactory.createForClass(HomeworkSub
 
 HomeworkSubmissionSchema.index({ homework: 1, student: 1 }, { unique: true });
 HomeworkSubmissionSchema.index({ status: 1 });
+HomeworkSubmissionSchema.index({ reviewed_by: 1 });

@@ -1,9 +1,7 @@
-// src/homework/schemas/homework.schema.ts - ОБНОВЛЕННАЯ СХЕМА
+// src/homework/schemas/homework.schema.ts - ИСПРАВЛЕННАЯ СХЕМА
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { Transform, Type } from 'class-transformer';
-import { Lesson } from '../../lessons/schemas/lesson.schema';
-import { Teacher } from '../../teachers/schemas/teacher.schema';
 
 export type HomeworkDocument = Homework & Document;
 
@@ -22,37 +20,27 @@ export class Homework {
     description?: string;
 
     @Prop({ type: Types.ObjectId, ref: 'Lesson', required: true })
-    @Type(() => Lesson)
-    lesson: Lesson;
+    lesson: Types.ObjectId;
 
     @Prop({ type: Types.ObjectId, ref: 'Teacher', required: true })
-    @Type(() => Teacher)
-    teacher: Teacher; // ИСПРАВЛЕНО: вместо teacherId
+    teacher: Types.ObjectId; // ИСПРАВЛЕНО: правильный тип связи
 
     @Prop()
-    deadline?: Date; // ДОБАВЛЕНО
+    deadline?: Date;
 
-    @Prop({ min: 1, max: 100 })
-    max_score?: number; // ДОБАВЛЕНО
+    @Prop({ min: 1, max: 100, default: 100 })
+    max_score?: number;
 
     @Prop({ default: 1, min: 1 })
-    max_attempts?: number; // ДОБАВЛЕНО
+    max_attempts?: number;
 
     @Prop({ default: false })
-    allow_late_submission?: boolean; // ДОБАВЛЕНО
+    allow_late_submission?: boolean;
 
-    @Prop({ default: false })
-    isPublished: boolean; // ДОБАВЛЕНО
+    @Prop({ default: true })
+    isPublished: boolean;
 
-    @Prop({ default: 0 })
-    submissions_count: number; // ДОБАВЛЕНО
-
-    @Prop({ default: 0 })
-    completed_count: number; // ДОБАВЛЕНО
-
-    @Prop({ default: 0 })
-    average_score: number; // ДОБАВЛЕНО
-
+    // ИСПРАВЛЕНО: правильная структура файлов
     @Prop([{
         filename: { type: String, required: true },
         originalName: { type: String, required: true },
@@ -60,13 +48,23 @@ export class Homework {
         size: { type: Number },
         url: { type: String, required: true }
     }])
-    files: {
+    files: Array<{
         filename: string;
         originalName: string;
         mimeType?: string;
         size?: number;
         url: string;
-    }[]; // ДОБАВЛЕНО
+    }>;
+
+    // Статистика задания
+    @Prop({ default: 0 })
+    submissions_count: number;
+
+    @Prop({ default: 0 })
+    completed_count: number;
+
+    @Prop({ default: 0 })
+    average_score: number;
 
     @Prop({ default: true })
     isActive: boolean;
@@ -79,3 +77,4 @@ export const HomeworkSchema = SchemaFactory.createForClass(Homework);
 
 HomeworkSchema.index({ lesson: 1 });
 HomeworkSchema.index({ teacher: 1 });
+HomeworkSchema.index({ deadline: 1 });

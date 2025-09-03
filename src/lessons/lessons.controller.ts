@@ -15,6 +15,8 @@ import {
     UseInterceptors,
     UploadedFile,
     Req,
+    HttpException,
+    HttpStatus,
 } from '@nestjs/common';
 import {
     ApiTags,
@@ -34,6 +36,7 @@ import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { GetUser } from 'src/auth/decorators/get-user.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { MarkAttendanceDto } from './dto/attendance.dto';
 
 
 @ApiTags('lessons')
@@ -274,55 +277,38 @@ export class LessonsController {
     * POST /lessons/:id/attendance - Отметить посещаемость на уроке
     */
     @Post(':id/attendance')
-    @UseGuards(RolesGuard)
-    @Roles('teacher', 'admin')
+    @Roles('teacher')
     @ApiOperation({
-        summary: 'Отметить посещаемость студентов на уроке',
-        description: 'Преподаватель отмечает присутствующих и выставляет оценки за занятие'
+        summary: 'Отметить посещаемость студентов',
+        description: 'Преподаватель отмечает присутствующих студентов и выставляет оценки за занятие'
     })
-    @ApiParam({ name: 'id', description: 'ID урока' })
-    @ApiBody({
-        schema: {
-            type: 'array',
-            items: {
-                type: 'object',
-                properties: {
-                    studentId: { type: 'string', description: 'ID студента' },
-                    isPresent: { type: 'boolean', description: 'Присутствовал ли студент' },
-                    lessonGrade: { type: 'number', minimum: 1, maximum: 5, description: 'Оценка за урок (1-5)' },
-                    notes: { type: 'string', description: 'Дополнительные заметки' }
-                },
-                required: ['studentId', 'isPresent']
-            }
-        }
-    })
-    @ApiResponse({ status: 200, description: 'Посещаемость успешно отмечена' })
-    @ApiResponse({ status: 403, description: 'Только назначенный преподаватель может отмечать посещаемость' })
     async markAttendance(
         @Param('id') lessonId: string,
-        @Body() attendanceDto: Array<{
-            studentId: string;
-            isPresent: boolean;
-            lessonGrade?: number;
-            notes?: string;
-        }>,
+        @Body() markAttendanceDto: MarkAttendanceDto,
         @Request() req: any
     ) {
-        this.logger.log(`Отметка посещаемости урока ${lessonId}`);
+        try {
+            const teacherId = req.user.id;
 
-        const teacherId = req.user?.userId || req.user?.id;
+            // ИСПРАВЛЕНО: правильная передача данных
+            const result = await this.lessonsService.markAttendance(
+                lessonId,
+                teacherId,
+                markAttendanceDto.attendanceData // Передаем массив attendanceData
+            );
 
-        const updatedLesson = await this.lessonsService.markAttendance(
-            lessonId,
-            attendanceDto,
-            teacherId
-        );
+            return {
+                success: true,
+                message: 'Посещаемость успешно отмечена',
+                data: result
+            };
 
-        return {
-            success: true,
-            message: 'Посещаемость успешно отмечена',
-            lesson: updatedLesson
-        };
+        } catch (error) {
+            throw new HttpException(
+                error.message || 'Ошибка отметки посещаемости',
+                error.status || HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
     }
 
     /**

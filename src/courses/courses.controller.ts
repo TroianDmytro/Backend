@@ -323,22 +323,20 @@ export class CoursesController {
 
         // Дополнительная проверка для преподавателей
         if (!isAdmin && isOwner) {
-            // Проверяем, что преподаватель одобрен и не заблокирован
-            const teacher = await this.teachersService.findById(currentUserId);
+            // Получаем преподавателя
+            const teacher = await this.teachersService.findById(teacherId);
+
             if (!teacher) {
                 throw new NotFoundException('Преподаватель не найден');
             }
 
-            if (!teacher.isApproved) {
-                throw new ForbiddenException(
-                    'Только одобренные преподаватели могут публиковать курсы'
-                );
+            // ИСПРАВЛЕНО: правильная проверка полей
+            if (!teacher.isApproved) { // теперь поле существует в схеме
+                throw new ForbiddenException('Преподаватель не подтвержден');
             }
 
-            if (teacher.isBlocked) {
-                throw new ForbiddenException(
-                    'Заблокированные преподаватели не могут изменять статус публикации курсов'
-                );
+            if (teacher.isBlocked) { // теперь поле существует в схеме
+                throw new ForbiddenException('Преподаватель заблокирован');
             }
         }
 

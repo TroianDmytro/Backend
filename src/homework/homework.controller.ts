@@ -1,400 +1,399 @@
-// СОЗДАТЬ НОВЫЙ ФАЙЛ: src/homework/homework.controller.ts
-
+// src/homework/homework.controller.ts
 import {
     Controller,
     Get,
     Post,
     Put,
-    Delete,
     Param,
     Body,
-    Query,
-    Req,
     UseGuards,
+    Request,
     UseInterceptors,
-    UploadedFile,
-    Logger,
-    BadRequestException,
-    StreamableFile,
-    Response
+    UploadedFiles,
+    HttpStatus,
+    HttpException,
+    Query
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import {
-    ApiTags,
-    ApiOperation,
-    ApiConsumes,
-    ApiBearerAuth,
-    ApiParam,
-    ApiBody,
-    ApiResponse,
-    ApiQuery
-} from '@nestjs/swagger';
-import { Response as ExpressResponse } from 'express';
-import { HomeworkService } from './homework.service';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { HomeworkService } from './homework.service';
+import { CreateHomeworkDto } from './dto/create-homework.dto';
+import { UpdateHomeworkDto } from './dto/update-homework.dto';
+import { ReviewHomeworkDto } from './dto/review-homework.dto';
+import { diskStorage } from 'multer';
+import { extname, join } from 'path';
+import { existsSync, mkdirSync } from 'fs';
+import { UserRole } from 'src/users/enums/user-role.enum';
+
+// Конфигурация для сохранения файлов
+const multerConfig = {
+    storage: diskStorage({
+        destination: (req, file, cb) => {
+            const uploadPath = join(process.cwd(), 'uploads', 'homework');
+            if (!existsSync(uploadPath)) {
+                mkdirSync(uploadPath, { recursive: true });
+            }
+            cb(null, uploadPath);
+        },
+        filename: (req, file, cb) => {
+            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+            cb(null, `homework-${uniqueSuffix}${extname(file.originalname)}`);
+        },
+    }),
+    fileFilter: (req, file, cb) => {
+        // Разрешенные типы файлов для домашних заданий
+        const allowedMimes = [
+            'application/pdf',
+            'application/zip',
+            'application/x-zip-compressed',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'text/plain'
+        ];
+
+        if (allowedMimes.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Неподдерживаемый тип файла. Разрешены: PDF, ZIP, DOC, DOCX, TXT'), false);
+        }
+    },
+    limits: {
+        fileSize: 50 * 1024 * 1024, // 50MB
+        files: 5 // Максимум 5 файлов
+    }
+};
 
 @ApiTags('homework')
 @Controller('homework')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class HomeworkController {
-    private readonly logger = new Logger(HomeworkController.name);
-
     constructor(private readonly homeworkService: HomeworkService) { }
 
     /**
-     * POST /homework/lesson/:lessonId - Создать домашнее задание (преподаватель)
+     * Создать домашнее задание (только преподаватели)
      */
-    @Post('lesson/:lessonId')
-    @UseGuards(RolesGuard)
-    @Roles('teacher', 'admin')
+    @Post()
+    @Roles('teacher')
+    @UseInterceptors(FilesInterceptor('files', 5, multerConfig))
     @ApiOperation({
-        summary: 'Создать домашнее задание для урока',
-        description: 'Преподаватель создает домашнее задание с PDF файлом инструкций'
+        summary: 'Создать домашнее задание',
+        description: 'Преподаватель создает домашнее задание с возможностью прикрепления файлов'
     })
-    @ApiParam({ name: 'lessonId', description: 'ID урока' })
     @ApiConsumes('multipart/form-data')
-    @ApiBody({
-        schema: {
-            type: 'object',
-            properties: {
-                title: { type: 'string', description: 'Название задания' },
-                description: { type: 'string', description: 'Описание задания' },
-                dueDate: { type: 'string', format: 'date-time', description: 'Срок сдачи (опционально)' },
-                file: { type: 'string', format: 'binary', description: 'PDF файл с заданием' }
-            },
-            required: ['title', 'file']
-        }
-    })
-    @UseInterceptors(FileInterceptor('file'))
     @ApiResponse({ status: 201, description: 'Домашнее задание создано' })
-    @ApiResponse({ status: 400, description: 'Требуется PDF файл' })
-    @ApiResponse({ status: 403, description: 'Нет прав доступа' })
-    async createHomework(
-        @Param('lessonId') lessonId: string,
-        @Body() homeworkData: {
-            title: string;
-            description?: string;
-            dueDate?: string;
-        },
-        @UploadedFile() file: Express.Multer.File,
-        @Req() request: any
+    @ApiResponse({ status: 403, description: 'Доступ запрещен' })
+    async create(
+        @Body() createHomeworkDto: CreateHomeworkDto,
+        @UploadedFiles() files: Express.Multer.File[],
+        @Request() req: any
     ) {
-        this.logger.log(`Создание домашнего задания для урока ${lessonId}`);
+        try {
+            const teacherId = req.user.id;
+            const homework = await this.homeworkService.create(createHomeworkDto, teacherId, files);
 
-        if (!file || file.mimetype !== 'application/pdf') {
-            throw new BadRequestException('Требуется PDF файл с заданием');
+            return {
+                success: true,
+                message: 'Домашнее задание успешно создано',
+                data: homework
+            };
+        } catch (error) {
+            throw new HttpException(
+                error.message || 'Ошибка создания домашнего задания',
+                error.status || HttpStatus.INTERNAL_SERVER_ERROR
+            );
         }
-
-        const teacherId = request.user?.userId || request.user?.id;
-
-        const homework = await this.homeworkService.createHomework(
-            lessonId,
-            homeworkData,
-            file,
-            teacherId
-        );
-
-        return {
-            success: true,
-            message: 'Домашнее задание успешно создано',
-            homework
-        };
     }
 
     /**
-     * POST /homework/:homeworkId/submit - Отправить выполненное задание (студент)
-     */
-    @Post(':homeworkId/submit')
-    @ApiOperation({
-        summary: 'Отправить выполненное домашнее задание',
-        description: 'Студент отправляет ZIP файл с выполненным заданием'
-    })
-    @ApiParam({ name: 'homeworkId', description: 'ID домашнего задания' })
-    @ApiConsumes('multipart/form-data')
-    @ApiBody({
-        schema: {
-            type: 'object',
-            properties: {
-                file: { type: 'string', format: 'binary', description: 'ZIP файл с выполненным заданием' }
-            },
-            required: ['file']
-        }
-    })
-    @UseInterceptors(FileInterceptor('file'))
-    @ApiResponse({ status: 200, description: 'Задание отправлено' })
-    @ApiResponse({ status: 400, description: 'Требуется ZIP файл или работа уже проверена' })
-    async submitHomework(
-        @Param('homeworkId') homeworkId: string,
-        @UploadedFile() file: Express.Multer.File,
-        @Req() request: any
-    ) {
-        this.logger.log(`Отправка домашнего задания ${homeworkId}`);
-
-        if (!file || !file.originalname.toLowerCase().endsWith('.zip')) {
-            throw new BadRequestException('Требуется ZIP файл с выполненным заданием');
-        }
-
-        const studentId = request.user?.userId || request.user?.id;
-
-        const submission = await this.homeworkService.submitHomework(
-            homeworkId,
-            file,
-            studentId
-        );
-
-        return {
-            success: true,
-            message: 'Домашнее задание успешно отправлено',
-            submission
-        };
-    }
-
-    /**
-     * PUT /homework/submission/:submissionId/grade - Проверить и оценить работу (преподаватель)
-     */
-    @Put('submission/:submissionId/grade')
-    @UseGuards(RolesGuard)
-    @Roles('teacher', 'admin')
-    @ApiOperation({
-        summary: 'Оценить выполненную работу',
-        description: 'Преподаватель проверяет работу и выставляет оценку'
-    })
-    @ApiParam({ name: 'submissionId', description: 'ID отправленной работы' })
-    @ApiBody({
-        schema: {
-            type: 'object',
-            properties: {
-                grade: { type: 'number', minimum: 1, maximum: 5, description: 'Оценка (1-5)' },
-                feedback: { type: 'string', description: 'Обратная связь преподавателя' }
-            },
-            required: ['grade']
-        }
-    })
-    @ApiResponse({ status: 200, description: 'Работа оценена' })
-    async gradeSubmission(
-        @Param('submissionId') submissionId: string,
-        @Body() gradeData: {
-            grade: number;
-            feedback?: string;
-        },
-        @Req() request: any
-    ) {
-        this.logger.log(`Оценивание работы ${submissionId}`);
-
-        const teacherId = request.user?.userId || request.user?.id;
-
-        const submission = await this.homeworkService.gradeSubmission(
-            submissionId,
-            gradeData,
-            teacherId
-        );
-
-        return {
-            success: true,
-            message: 'Работа успешно оценена',
-            submission
-        };
-    }
-
-    /**
-     * GET /homework/student/my - Получить мои домашние задания (студент)
+     * Получить домашние задания студента
      */
     @Get('student/my')
+    @Roles('student')
     @ApiOperation({
         summary: 'Получить мои домашние задания',
-        description: 'Студент получает список всех своих домашних заданий'
+        description: 'Студент получает список своих домашних заданий'
     })
-    @ApiQuery({ name: 'status', required: false, description: 'Фильтр по статусу (pending, submitted, graded)' })
-    @ApiResponse({ status: 200, description: 'Список домашних заданий студента' })
     async getMyHomeworks(
-        @Req() request: any,
-        @Query('status') status?: string
+        @Request() req: any,
+        @Query('courseId') courseId?: string
     ) {
-        const studentId = request.user?.userId || request.user?.id;
-        this.logger.log(`Получение домашних заданий студента ${studentId}`);
+        try {
+            const studentId = req.user.id;
+            const homeworks = await this.homeworkService.getStudentHomeworks(studentId, courseId);
 
-        const homeworks = await this.homeworkService.getStudentHomeworks(studentId);
-
-        // Фильтруем по статусу если указан
-        let filteredHomeworks = homeworks;
-        if (status) {
-            filteredHomeworks = homeworks.filter(hw => hw.status === status);
+            return {
+                success: true,
+                data: homeworks
+            };
+        } catch (error) {
+            throw new HttpException(
+                error.message || 'Ошибка получения домашних заданий',
+                error.status || HttpStatus.INTERNAL_SERVER_ERROR
+            );
         }
-
-        return {
-            success: true,
-            studentId,
-            homeworks: filteredHomeworks
-        };
     }
 
     /**
-     * GET /homework/teacher/submissions - Получить задания для проверки (преподаватель)
+     * Отправить выполненное домашнее задание
+     */
+    @Post(':id/submit')
+    @Roles('student')
+    @UseInterceptors(FilesInterceptor('files', 10, {
+        storage: diskStorage({
+            destination: (req, file, cb) => {
+                const uploadPath = join(process.cwd(), 'uploads', 'submissions');
+                if (!existsSync(uploadPath)) {
+                    mkdirSync(uploadPath, { recursive: true });
+                }
+                cb(null, uploadPath);
+            },
+            filename: (req, file, cb) => {
+                const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+                cb(null, `submission-${uniqueSuffix}${extname(file.originalname)}`);
+            },
+        }),
+        fileFilter: (req, file, cb) => {
+            // Для отправок студентов разрешаем больше типов файлов
+            const allowedMimes = [
+                'application/zip',
+                'application/x-zip-compressed',
+                'application/pdf',
+                'application/msword',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                'text/plain',
+                'image/jpeg',
+                'image/png',
+                'image/gif'
+            ];
+
+            if (allowedMimes.includes(file.mimetype)) {
+                cb(null, true);
+            } else {
+                cb(new Error('Неподдерживаемый тип файла'), false);
+            }
+        },
+        limits: {
+            fileSize: 100 * 1024 * 1024, // 100MB для студенческих работ
+            files: 10
+        }
+    }))
+    @ApiOperation({
+        summary: 'Отправить домашнее задание',
+        description: 'Студент отправляет выполненное домашнее задание'
+    })
+    @ApiConsumes('multipart/form-data')
+    async submitHomework(
+        @Param('id') homeworkId: string,
+        @UploadedFiles() files: Express.Multer.File[],
+        @Request() req: any
+    ) {
+        try {
+            const studentId = req.user.id;
+
+            if (!files || files.length === 0) {
+                throw new HttpException(
+                    'Необходимо прикрепить хотя бы один файл с решением',
+                    HttpStatus.BAD_REQUEST
+                );
+            }
+
+            const submission = await this.homeworkService.submitHomework(homeworkId, studentId, files);
+
+            return {
+                success: true,
+                message: 'Домашнее задание успешно отправлено',
+                data: submission
+            };
+        } catch (error) {
+            throw new HttpException(
+                error.message || 'Ошибка отправки домашнего задания',
+                error.status || HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
+    /**
+     * Получить отправки для проверки (преподаватели)
      */
     @Get('teacher/submissions')
-    @UseGuards(RolesGuard)
-    @Roles('teacher', 'admin')
+    @Roles('teacher')
     @ApiOperation({
-        summary: 'Получить задания для проверки',
-        description: 'Преподаватель получает список работ студентов для проверки'
+        summary: 'Получить отправки для проверки',
+        description: 'Преподаватель получает список отправленных домашних заданий для проверки'
     })
-    @ApiQuery({ name: 'status', required: false, description: 'Фильтр по статусу проверки' })
-    @ApiQuery({ name: 'courseId', required: false, description: 'Фильтр по курсу' })
-    @ApiResponse({ status: 200, description: 'Список работ для проверки' })
     async getSubmissionsForReview(
-        @Req() request: any,
+        @Request() req: any,
         @Query('status') status?: string,
         @Query('courseId') courseId?: string
     ) {
-        const teacherId = request.user?.userId || request.user?.id;
-        this.logger.log(`Получение работ для проверки преподавателем ${teacherId}`);
+        try {
+            const teacherId = req.user.id;
+            const submissions = await this.homeworkService.getSubmissionsForTeacher(
+                teacherId,
+                status,
+                courseId
+            );
 
-        const submissions = await this.homeworkService.getSubmissionsForTeacher(
-            teacherId,
-            status,
-            courseId
-        );
-
-        return {
-            success: true,
-            teacherId,
-            submissions
-        };
+            return {
+                success: true,
+                data: submissions
+            };
+        } catch (error) {
+            throw new HttpException(
+                error.message || 'Ошибка получения отправок',
+                error.status || HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
     }
 
     /**
-     * GET /homework/:homeworkId - Получить информацию о домашнем задании
+     * Проверить домашнее задание (преподаватели)
      */
-    @Get(':homeworkId')
-    @ApiOperation({ summary: 'Получить информацию о домашнем задании' })
-    @ApiParam({ name: 'homeworkId', description: 'ID домашнего задания' })
-    @ApiResponse({ status: 200, description: 'Информация о задании' })
-    async getHomework(@Param('homeworkId') homeworkId: string) {
-        this.logger.log(`Получение информации о задании ${homeworkId}`);
-
-        const homework = await this.homeworkService.findById(homeworkId);
-
-        return {
-            success: true,
-            homework
-        };
-    }
-
-    /**
-     * GET /homework/:homeworkId/submissions - Получить все отправки задания (преподаватель)
-     */
-    @Get(':homeworkId/submissions')
-    @UseGuards(RolesGuard)
-    @Roles('teacher', 'admin')
-    @ApiOperation({ summary: 'Получить все отправки домашнего задания' })
-    @ApiParam({ name: 'homeworkId', description: 'ID домашнего задания' })
-    @ApiResponse({ status: 200, description: 'Список отправок задания' })
-    async getHomeworkSubmissions(@Param('homeworkId') homeworkId: string) {
-        this.logger.log(`Получение отправок задания ${homeworkId}`);
-
-        const result = await this.homeworkService.getSubmissions(homeworkId);
-
-        return {
-            success: true,
-            ...result
-        };
-    }
-
-    /**
-     * GET /homework/download/:homeworkId/:fileId - Скачать файл задания
-     */
-    @Get('download/:homeworkId/:fileId')
-    @ApiOperation({ summary: 'Скачать файл домашнего задания' })
-    @ApiParam({ name: 'homeworkId', description: 'ID домашнего задания' })
-    @ApiParam({ name: 'fileId', description: 'ID файла' })
-    async downloadHomeworkFile(
-        @Param('homeworkId') homeworkId: string,
-        @Param('fileId') fileId: string,
-        @Response({ passthrough: true }) res: ExpressResponse,
-        @Req() request: any
-    ) {
-        this.logger.log(`Скачивание файла ${fileId} задания ${homeworkId}`);
-
-        const userId = request.user?.userId || request.user?.id;
-        const isTeacher = request.user?.roles?.includes('teacher') || request.user?.roles?.includes('admin');
-
-        const fileData = await this.homeworkService.downloadFile(
-            fileId,
-            homeworkId,
-            null, // submissionId = null для файлов задания
-            userId,
-            isTeacher
-        );
-
-        res.set({
-            'Content-Type': fileData.mimeType,
-            'Content-Disposition': `attachment; filename="${fileData.filename}"`
-        });
-
-        return new StreamableFile(fileData.data);
-    }
-
-    /**
-     * GET /homework/download/submission/:submissionId/:fileId - Скачать файл отправки
-     */
-    @Get('download/submission/:submissionId/:fileId')
-    @UseGuards(RolesGuard)
-    @Roles('teacher', 'admin', 'student')
-    @ApiOperation({ summary: 'Скачать файл отправленной работы' })
-    @ApiParam({ name: 'submissionId', description: 'ID отправки' })
-    @ApiParam({ name: 'fileId', description: 'ID файла' })
-    async downloadSubmissionFile(
+    @Put('submissions/:submissionId/review')
+    @Roles('teacher')
+    @ApiOperation({
+        summary: 'Проверить домашнее задание',
+        description: 'Преподаватель проверяет и оценивает домашнее задание студента'
+    })
+    async reviewHomework(
         @Param('submissionId') submissionId: string,
-        @Param('fileId') fileId: string,
-        @Response({ passthrough: true }) res: ExpressResponse,
-        @Req() request: any
+        @Body() reviewData: ReviewHomeworkDto,
+        @Request() req: any
     ) {
-        this.logger.log(`Скачивание файла ${fileId} отправки ${submissionId}`);
+        try {
+            const teacherId = req.user.id;
+            const reviewedSubmission = await this.homeworkService.reviewHomework(
+                submissionId,
+                teacherId,
+                reviewData
+            );
 
-        const userId = request.user?.userId || request.user?.id;
-        const isTeacher = request.user?.roles?.includes('teacher') || request.user?.roles?.includes('admin');
-
-        const fileData = await this.homeworkService.downloadFile(
-            fileId,
-            '', // homeworkId не нужен для отправок
-            submissionId,
-            userId,
-            isTeacher
-        );
-
-        res.set({
-            'Content-Type': fileData.mimeType,
-            'Content-Disposition': `attachment; filename="${fileData.filename}"`
-        });
-
-        return new StreamableFile(fileData.data);
+            return {
+                success: true,
+                message: 'Домашнее задание успешно проверено',
+                data: reviewedSubmission
+            };
+        } catch (error) {
+            throw new HttpException(
+                error.message || 'Ошибка проверки домашнего задания',
+                error.status || HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
     }
 
     /**
-     * DELETE /homework/:homeworkId - Удалить домашнее задание (преподаватель)
+     * Получить конкретное домашнее задание
      */
-    @Delete(':homeworkId')
-    @UseGuards(RolesGuard)
-    @Roles('teacher', 'admin')
-    @ApiOperation({ summary: 'Удалить домашнее задание' })
-    @ApiParam({ name: 'homeworkId', description: 'ID домашнего задания' })
-    @ApiResponse({ status: 200, description: 'Задание удалено' })
-    async deleteHomework(
-        @Param('homeworkId') homeworkId: string,
-        @Req() request: any
+    @Get(':id')
+    @ApiOperation({
+        summary: 'Получить домашнее задание по ID',
+        description: 'Получить детальную информацию о домашнем задании'
+    })
+    async getHomework(
+        @Param('id') homeworkId: string,
+        @Request() req: any
     ) {
-        this.logger.log(`Удаление домашнего задания ${homeworkId}`);
+        try {
+            // ИСПРАВЛЕНО: используем существующий метод findOne
+            const homework = await this.homeworkService.findOne(homeworkId);
 
-        const teacherId = request.user?.userId || request.user?.id;
+            if (!homework) {
+                throw new HttpException('Домашнее задание не найдено', HttpStatus.NOT_FOUND);
+            }
 
-        await this.homeworkService.deleteHomework(homeworkId, teacherId);
+            // Проверяем доступ
+            const userRole = req.user.role;
+            const userId = req.user.id;
 
-        return {
-            success: true,
-            message: 'Домашнее задание успешно удалено'
-        };
+            if (userRole === UserRole.STUDENT) {
+                // ИСПРАВЛЕНО: используем существующий метод checkStudentAccess
+                const hasAccess = await this.homeworkService.checkStudentAccess(homeworkId, userId);
+                if (!hasAccess) {
+                    throw new HttpException('Доступ к заданию запрещен', HttpStatus.FORBIDDEN);
+                }
+            } else if (userRole === UserRole.TEACHER) {
+                // Преподаватель может видеть только свои задания
+                if (homework.teacher.toString() !== userId) {
+                    throw new HttpException('Доступ к заданию запрещен', HttpStatus.FORBIDDEN);
+                }
+            }
+
+            return {
+                success: true,
+                data: homework
+            };
+        } catch (error) {
+            throw new HttpException(
+                error.message || 'Ошибка получения домашнего задания',
+                error.status || HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
     }
+
+    /**
+     * Получить статистику по домашнему заданию (преподаватели)
+     */
+    @Get(':id/statistics')
+    @Roles(UserRole.TEACHER, UserRole.ADMIN)
+    @ApiOperation({
+        summary: 'Получить статистику по домашнему заданию',
+        description: 'Статистика выполнения домашнего задания студентами'
+    })
+    async getHomeworkStatistics(
+        @Param('id') homeworkId: string,
+        @Request() req: any
+    ) {
+        try {
+            // ИСПРАВЛЕНО: используем существующий метод getHomeworkStatistics
+            const statistics = await this.homeworkService.getHomeworkStatistics(homeworkId);
+
+            return {
+                success: true,
+                data: statistics
+            };
+        } catch (error) {
+            throw new HttpException(
+                error.message || 'Ошибка получения статистики',
+                error.status || HttpStatus.INTERNAL_SERVER_ERROR
+            );
+        }
+    }
+
 }
+
+/**
+ * ОБЪЯСНЕНИЕ КОНТРОЛЛЕРА ДОМАШНИХ ЗАДАНИЙ:
+ * 
+ * 1. **ЗАГРУЗКА ФАЙЛОВ**:
+ *    - Multer настроен для сохранения файлов в папки uploads/homework и uploads/submissions
+ *    - Поддерживаются PDF, ZIP, DOC, DOCX, TXT файлы
+ *    - Ограничения: 50MB для заданий преподавателя, 100MB для отправок студентов
+ * 
+ * 2. **РОЛИ И ДОСТУП**:
+ *    - Создавать задания могут только преподаватели
+ *    - Отправлять решения могут только студенты
+ *    - Проверять могут только преподаватели своих заданий
+ * 
+ * 3. **ENDPOINTS**:
+ *    - POST /homework - создать задание (преподаватель)
+ *    - GET /homework/student/my - мои задания (студент)
+ *    - POST /homework/:id/submit - отправить решение (студент)
+ *    - GET /homework/teacher/submissions - отправки для проверки (преподаватель)
+ *    - PUT /homework/submissions/:id/review - проверить задание (преподаватель)
+ *    - GET /homework/:id - получить задание
+ *    - GET /homework/:id/statistics - статистика задания
+ * 
+ * 4. **ВАЛИДАЦИЯ ФАЙЛОВ**:
+ *    - Проверка типа файлов
+ *    - Ограничение размера
+ *    - Автоматическое создание папок для загрузки
+ * 
+ * 5. **ОБРАБОТКА ОШИБОК**:
+ *    - Все методы обернуты в try-catch
+ *    - Понятные сообщения об ошибках
+ *    - Правильные HTTP статус коды
+ */

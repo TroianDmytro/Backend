@@ -1,74 +1,33 @@
-// src/homework/dto/review-homework.dto.ts
-import {
-    IsNotEmpty,
-    IsString,
-    IsOptional,
-    IsNumber,
-    Min,
-    Max
-} from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
-
-import { Type } from 'class-transformer';
-import { ValidateNested, IsArray } from 'class-validator';
-
-export class DetailedFeedbackDto {
-    @ApiProperty({ example: 'Качество кода', description: 'Критерий оценки' })
-    @IsString()
-    @IsNotEmpty()
-    criteria: string;
-
-    @ApiProperty({ example: 85, description: 'Оценка по критерию (0-100)' })
-    @IsNumber()
-    @Min(0)
-    @Max(100)
-    score: number;
-
-    @ApiProperty({
-        example: 'Код хорошо структурирован, но нужно добавить комментарии',
-        description: 'Комментарий по критерию',
-        required: false
-    })
-    @IsString()
-    @IsOptional()
-    comment?: string;
-}
+// src/homework/dto/review-homework.dto.ts - ОБНОВЛЕННЫЙ DTO
+import { IsNumber, IsOptional, IsString, Min, Max } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ReviewHomeworkDto {
     @ApiProperty({
-        example: 90,
-        description: 'Общая оценка за задание (0-100)'
+        description: 'Оценка за домашнее задание',
+        example: 85,
+        minimum: 0,
+        maximum: 100
     })
     @IsNumber()
     @Min(0)
     @Max(100)
     score: number;
 
-    @ApiProperty({
-        example: 'Отличная работа! Все требования выполнены. Рекомендую добавить больше комментариев в код.',
-        description: 'Комментарий преподавателя'
+    @ApiPropertyOptional({
+        description: 'Краткий комментарий преподавателя',
+        example: 'Хорошая работа, но есть ошибки в 3-м задании'
     })
-    @IsString()
-    @IsNotEmpty()
-    teacher_comment: string;
-
-    @ApiProperty({
-        description: 'Детальная оценка по критериям',
-        type: [DetailedFeedbackDto],
-        required: false
-    })
-    @IsArray()
-    @ValidateNested({ each: true })
-    @Type(() => DetailedFeedbackDto)
     @IsOptional()
-    detailed_feedback?: DetailedFeedbackDto[];
-
-    @ApiProperty({
-        example: 'reviewed',
-        description: 'Статус после проверки',
-        enum: ['reviewed', 'returned_for_revision']
-    })
     @IsString()
+    comment?: string;
+
+    @ApiPropertyOptional({
+        description: 'Подробный отзыв преподавателя',
+        example: 'Задания 1-2 выполнены отлично. В задании 3 неправильно применена формула...'
+    })
     @IsOptional()
-    status?: 'reviewed' | 'returned_for_revision';
+    @IsString()
+    detailed_feedback?: string;
 }
+

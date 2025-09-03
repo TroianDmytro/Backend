@@ -380,7 +380,7 @@ export class CoursesService {
 
         // Обновляем статистику преподавателей
         if (updateCourseDto.teacherId && updateCourseDto.teacherId !== oldTeacherId?.toString()) {
-            statsUpdates.push(this.updateTeacherStatistics(oldTeacherId?.id?.toString() || ''));
+            statsUpdates.push(this.updateTeacherStatistics(oldTeacherId?._id.toString() || ''));
             statsUpdates.push(this.updateTeacherStatistics(updateCourseDto.teacherId));
         } else if (oldTeacherId) {
             statsUpdates.push(this.updateTeacherStatistics(oldTeacherId.toString()));
@@ -388,7 +388,7 @@ export class CoursesService {
 
         // Обновляем статистику категорий
         if (updateCourseDto.categoryId && updateCourseDto.categoryId !== oldCategoryId?.toString()) {
-            statsUpdates.push(this.updateCategoryStatistics(oldTeacherId?.id?.toString() || ''));
+            statsUpdates.push(this.updateCategoryStatistics(oldTeacherId?._id.toString() || ''));
             statsUpdates.push(this.updateCategoryStatistics(updateCourseDto.categoryId));
         } else if (oldCategoryId) {
             statsUpdates.push(this.updateCategoryStatistics(oldCategoryId.toString()));
@@ -436,7 +436,7 @@ export class CoursesService {
 
         // Обновляем статистику связанных сущностей
         await Promise.all([
-            this.updateTeacherStatistics(teacherId?.id?.toString() || ''),
+            this.updateTeacherStatistics(teacherId?._id.toString() || ''),
             this.updateCategoryStatistics(categoryId?.toString() || ''),
             this.updateDifficultyLevelStatistics(difficultyLevelId?.toString() || '')
         ]);
