@@ -101,6 +101,15 @@ export class Course {
     @Prop()
     slug?: string;
 
+    @Prop({ default: false })
+    paymentRequired: boolean; // Требуется ли оплата для записи
+
+    @Prop({ default: false })
+    allowLateEnrollment: boolean; // Разрешена ли запись после начала курса (только админ)
+
+    @Prop({ default: Date.now })
+    enrollmentDeadline?: Date; // Крайний срок для записи
+
     createdAt: Date;
     updatedAt: Date;
 }

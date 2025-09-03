@@ -27,75 +27,9 @@ export class HomeworkService {
         @InjectModel(Subscription.name) private subscriptionModel: Model<SubscriptionDocument>,
     ) { }
 
-    async findById(id: string): Promise<HomeworkDocument> {
-        const homework = await this.homeworkModel.findById(id)
-            .populate('lesson', 'title date')
-            .populate('assignedBy', 'name email');
 
-        if (!homework) {
-            throw new NotFoundException('Домашнее задание не найдено');
-        }
-        return homework;
-    }
 
-    /**
-     * Создание домашнего задания преподавателем
-     */
-    async createHomework(
-        createHomeworkDto: CreateHomeworkDto,
-        files: Express.Multer.File[],
-        teacherId: string
-    ): Promise<HomeworkDocument> {
-        this.logger.log(`Создание домашнего задания: ${createHomeworkDto.title}`);
 
-        // Проверяем существование урока
-        const lesson = await this.lessonModel.findById(createHomeworkDto.lessonId).populate('courseId').exec();
-        if (!lesson) {
-            throw new NotFoundException(`Урок с ID ${createHomeworkDto.lessonId} не найден`);
-        }
-
-        const course = lesson.course as any;
-
-        // Проверяем права преподавателя
-        if (course.mainTeacher.toString() !== teacherId) {
-            throw new ForbiddenException('Вы можете создавать задания только для своих курсов');
-        }
-
-        // Проверяем уникальность названия задания в рамках урока
-        const existingHomework = await this.homeworkModel.findOne({
-            lessonId: createHomeworkDto.lessonId,
-            title: createHomeworkDto.title
-        }).exec();
-
-        if (existingHomework) {
-            throw new ConflictException(`Задание с названием "${createHomeworkDto.title}" уже существует в этом уроке`);
-        }
-
-        // Валидируем и конвертируем файлы
-        if (!files || files.length === 0) {
-            throw new BadRequestException('Необходимо загрузить хотя бы один файл задания');
-        }
-
-        const homeworkFiles = await this.processFiles(files);
-
-        // Создаем домашнее задание
-        const homework = new this.homeworkModel({
-            ...createHomeworkDto,
-            courseId: course._id,
-            teacherId: teacherId,
-            files: homeworkFiles,
-            isActive: true,
-            isPublished: createHomeworkDto.isPublished || false,
-            submissions_count: 0,
-            completed_count: 0,
-            average_score: 0
-        });
-
-        const savedHomework = await homework.save();
-        this.logger.log(`Домашнее задание создано: ${savedHomework.id}`);
-
-        return savedHomework;
-    }
 
     /**
      * Получение заданий урока
@@ -180,27 +114,360 @@ export class HomeworkService {
     }
 
     /**
-     * Удаление домашнего задания
+   * НОВЫЙ МЕТОД: Создать домашнее задание для урока
+   */
+    async createHomework(
+        lessonId: string,
+        homeworkData: {
+            title: string;
+            description?: string;
+            dueDate?: string;
+        },
+        file: Express.Multer.File,
+        teacherId: string
+    ): Promise<HomeworkDocument> {
+        this.logger.log(`Создание домашнего задания для урока ${lessonId}`);
+
+        const lesson = await this.lessonModel.findById(lessonId)
+            .populate('course teacher');
+
+        if (!lesson) {
+            throw new NotFoundException('Урок не найден');
+        }
+
+        // Проверяем права преподавателя
+        if (lesson.teacher._id.toString() !== teacherId) {
+            throw new ForbiddenException('Можно создавать задания только для своих уроков');
+        }
+
+        // Сохраняем файл задания в base64
+        const fileData = {
+            filename: `homework_${lessonId}_${Date.now()}.pdf`,
+            original_name: file.originalname,
+            data: file.buffer.toString('base64'),
+            mime_type: file.mimetype,
+            size_bytes: file.size,
+            uploaded_at: new Date()
+        };
+
+        const homework = new this.homeworkModel({
+            title: homeworkData.title,
+            description: homeworkData.description,
+            lesson: lessonId,
+            assignedBy: teacherId,
+            files: [fileData],
+            deadline: homeworkData.dueDate ? new Date(homeworkData.dueDate) : null,
+            isPublished: true
+        });
+
+        const savedHomework = await homework.save();
+
+        // Создаем задания для всех студентов курса
+        await this.createHomeworkForAllStudents(savedHomework._id.toString(), lesson.course._id.toString());
+
+        this.logger.log(`Домашнее задание создано: ${savedHomework._id}`);
+        return savedHomework;
+    }
+
+    /**
+     * НОВЫЙ МЕТОД: Отправить выполненную работу
      */
-    async deleteHomework(id: string, teacherId: string, isAdmin: boolean = false): Promise<void> {
-        const homework = await this.homeworkModel.findById(id).exec();
+    async submitHomework(
+        homeworkId: string,
+        file: Express.Multer.File,
+        studentId: string
+    ): Promise<HomeworkSubmissionDocument> {
+        this.logger.log(`Отправка домашнего задания ${homeworkId} студентом ${studentId}`);
+
+        const homework = await this.homeworkModel.findById(homeworkId)
+            .populate('lesson');
+
         if (!homework) {
-            throw new NotFoundException(`Домашнее задание с ID ${id} не найдено`);
+            throw new NotFoundException('Домашнее задание не найдено');
         }
 
-        // Проверяем права доступа
-        if (!isAdmin && homework.teacher?.id?.toString() !== teacherId) {
-            throw new ForbiddenException('У вас нет прав на удаление этого задания');
+        if (!homework.isPublished) {
+            throw new BadRequestException('Задание не опубликовано');
         }
 
-        // Проверяем наличие отправленных работ
-        const submissionsCount = await this.submissionModel.countDocuments({ homeworkId: id }).exec();
+        // Проверяем срок сдачи
+        if (homework.deadline && new Date() > homework.deadline) {
+            this.logger.warn(`Студент ${studentId} сдает задание ${homeworkId} с опозданием`);
+        }
+
+        // Проверяем, не сдавал ли уже студент работу
+        const existingSubmission = await this.submissionModel.findOne({
+            homework: homeworkId,
+            student: studentId
+        });
+
+        if (existingSubmission && existingSubmission.status === 'graded') {
+            throw new BadRequestException('Работа уже проверена и оценена');
+        }
+
+        // Сохраняем файл отправки
+        const fileData = {
+            filename: `submission_${homeworkId}_${studentId}_${Date.now()}.zip`,
+            original_name: file.originalname,
+            data: file.buffer.toString('base64'),
+            mime_type: file.mimetype,
+            size_bytes: file.size,
+            uploaded_at: new Date()
+        };
+
+        if (existingSubmission) {
+            // Обновляем существующую отправку
+            existingSubmission.files = [fileData];
+            existingSubmission.status = 'submitted' as any;
+            existingSubmission.submitted_at = new Date();
+
+            const updatedSubmission = await existingSubmission.save();
+            this.logger.log(`Домашнее задание переотправлено: ${homeworkId}`);
+            return updatedSubmission;
+        } else {
+            // Создаем новую отправку
+            const submission = new this.submissionModel({
+                homework: homeworkId,
+                student: studentId,
+                files: [fileData],
+                status: 'submitted',
+                submitted_at: new Date(),
+                is_late: homework.deadline ? new Date() > homework.deadline : false
+            });
+
+            const savedSubmission = await submission.save();
+            this.logger.log(`Домашнее задание отправлено: ${homeworkId}`);
+            return savedSubmission;
+        }
+    }
+
+    /**
+     * НОВЫЙ МЕТОД: Оценить выполненную работу
+     */
+    async gradeSubmission(
+        submissionId: string,
+        gradeData: { grade: number; feedback?: string },
+        teacherId: string
+    ): Promise<HomeworkSubmissionDocument> {
+        this.logger.log(`Оценивание работы ${submissionId} преподавателем ${teacherId}`);
+
+        const submission = await this.submissionModel.findById(submissionId)
+            .populate({
+                path: 'homework',
+                populate: {
+                    path: 'assignedBy',
+                    select: '_id'
+                }
+            });
+
+        if (!submission) {
+            throw new NotFoundException('Отправка домашнего задания не найдена');
+        }
+
+        // Проверяем права преподавателя
+        const homework = submission.homework as any;
+        if (homework.assignedBy._id.toString() !== teacherId) {
+            throw new ForbiddenException('Можно оценивать только задания своих курсов');
+        }
+
+        if (gradeData.grade < 1 || gradeData.grade > 5) {
+            throw new BadRequestException('Оценка должна быть от 1 до 5');
+        }
+
+        // Обновляем отправку
+        submission.score = gradeData.grade;
+        submission.teacher_comment = gradeData.feedback;
+        submission.status = 'graded' as any;
+        submission.reviewed_at = new Date();
+        submission.reviewed_by = teacherId as any;
+
+        const updatedSubmission = await submission.save();
+        this.logger.log(`Работа оценена: ${submissionId}, оценка: ${gradeData.grade}`);
+
+        return updatedSubmission;
+    }
+
+    /**
+     * НОВЫЙ МЕТОД: Получить домашние задания студента
+     */
+    async getStudentHomeworks(studentId: string): Promise<any[]> {
+        this.logger.log(`Получение домашних заданий студента ${studentId}`);
+
+        // Получаем курсы студента
+        const subscriptions = await this.subscriptionModel
+            .find({
+                user: studentId,
+                status: { $in: ['active', 'paid'] }
+            })
+            .populate('course');
+
+        const courseIds = subscriptions.map(sub => (sub.course as any)._id);
+
+        // Получаем все домашние задания по курсам студента
+        const homeworks = await this.homeworkModel
+            .find({ isPublished: true })
+            .populate({
+                path: 'lesson',
+                match: { course: { $in: courseIds } },
+                populate: {
+                    path: 'course subject',
+                    select: 'title name'
+                }
+            })
+            .populate('assignedBy', 'name second_name');
+
+        // Фильтруем только те задания, где lesson не null
+        const validHomeworks = homeworks.filter(hw => hw.lesson);
+
+        // Получаем отправки студента
+        const submissions = await this.submissionModel.find({
+            student: studentId,
+            homework: { $in: validHomeworks.map(hw => hw._id) }
+        });
+
+        const submissionMap = new Map(
+            submissions.map(sub => [sub.homework.toString(), sub])
+        );
+
+        // Формируем результат
+        const result = validHomeworks.map(homework => {
+            const submission = submissionMap.get(homework._id.toString());
+
+            return {
+                homework: {
+                    _id: homework._id,
+                    title: homework.title,
+                    description: homework.description,
+                    deadline: homework.deadline,
+                    lesson: homework.lesson,
+                    assignedBy: homework.assignedBy,
+                    createdAt: homework.createdAt
+                },
+                submission: submission ? {
+                    _id: submission._id,
+                    status: submission.status,
+                    submitted_at: submission.submitted_at,
+                    score: submission.score,
+                    teacher_comment: submission.teacher_comment,
+                    is_late: submission.is_late
+                } : null,
+                status: submission ? submission.status : 'pending'
+            };
+        });
+
+        return result;
+    }
+
+    /**
+     * НОВЫЙ МЕТОД: Получить отправки для преподавателя
+     */
+    async getSubmissionsForTeacher(
+        teacherId: string,
+        status?: string,
+        courseId?: string
+    ): Promise<HomeworkSubmissionDocument[]> {
+        this.logger.log(`Получение отправок для преподавателя ${teacherId}`);
+
+        // Строим фильтр для поиска домашних заданий преподавателя
+        const homeworkFilter: any = { assignedBy: teacherId };
+
+        // Если указан курс, добавляем фильтр по курсу
+        if (courseId) {
+            const lessons = await this.lessonModel.find({ course: courseId }).select('_id');
+            const lessonIds = lessons.map(l => l._id);
+            homeworkFilter.lesson = { $in: lessonIds };
+        }
+
+        const homeworks = await this.homeworkModel.find(homeworkFilter).select('_id');
+        const homeworkIds = homeworks.map(hw => hw._id);
+
+        // Строим фильтр для отправок
+        const submissionFilter: any = { homework: { $in: homeworkIds } };
+        if (status) {
+            submissionFilter.status = status;
+        }
+
+        return this.submissionModel
+            .find(submissionFilter)
+            .populate('student', 'name email')
+            .populate({
+                path: 'homework',
+                populate: {
+                    path: 'lesson',
+                    populate: {
+                        path: 'course subject',
+                        select: 'title name'
+                    }
+                }
+            })
+            .sort({ submitted_at: -1 })
+            .exec();
+    }
+
+    /**
+     * НОВЫЙ МЕТОД: Создать домашние задания для всех студентов курса
+     */
+    private async createHomeworkForAllStudents(
+        homeworkId: string,
+        courseId: string
+    ): Promise<void> {
+        this.logger.log(`Создание заданий для студентов курса ${courseId}`);
+
+        // Получаем всех студентов курса
+        const subscriptions = await this.subscriptionModel.find({
+            course: courseId,
+            status: { $in: ['active', 'paid'] }
+        });
+
+        // Создаем записи для каждого студента (если нужно для отслеживания)
+        // В текущей реализации мы создаем отправки только при фактической сдаче работы
+        this.logger.log(`Задание доступно для ${subscriptions.length} студентов`);
+    }
+
+    /**
+     * НОВЫЙ МЕТОД: Найти домашнее задание по ID
+     */
+    async findById(homeworkId: string): Promise<HomeworkDocument> {
+        const homework = await this.homeworkModel.findById(homeworkId)
+            .populate('lesson')
+            .populate('assignedBy', 'name second_name');
+
+        if (!homework) {
+            throw new NotFoundException('Домашнее задание не найдено');
+        }
+
+        return homework;
+    }
+
+    /**
+     * НОВЫЙ МЕТОД: Удалить домашнее задание
+     */
+    async deleteHomework(homeworkId: string, teacherId: string): Promise<void> {
+        this.logger.log(`Удаление домашнего задания ${homeworkId}`);
+
+        const homework = await this.homeworkModel.findById(homeworkId);
+        if (!homework) {
+            throw new NotFoundException('Домашнее задание не найдено');
+        }
+
+        // Проверяем права
+        if (homework.assignedBy.toString() !== teacherId) {
+            throw new ForbiddenException('Можно удалять только свои задания');
+        }
+
+        // Проверяем, есть ли отправки
+        const submissionsCount = await this.submissionModel.countDocuments({
+            homework: homeworkId
+        });
+
         if (submissionsCount > 0) {
-            throw new ConflictException(`Нельзя удалить задание с ${submissionsCount} отправленными работами`);
+            throw new BadRequestException(
+                `Нельзя удалить задание: есть ${submissionsCount} отправок от студентов`
+            );
         }
 
-        await this.homeworkModel.findByIdAndDelete(id).exec();
-        this.logger.log(`Домашнее задание удалено: ${id}`);
+        await this.homeworkModel.findByIdAndDelete(homeworkId);
+        this.logger.log(`Домашнее задание удалено: ${homeworkId}`);
     }
 
     /**
@@ -250,86 +517,6 @@ export class HomeworkService {
         return updatedSubmission;
     }
 
-    /**
-     * Получение отправок для преподавателя
-     */
-    async getSubmissionsForTeacher(
-        teacherId: string,
-        status?: string,
-        courseId?: string,
-        page: number = 1,
-        limit: number = 20
-    ): Promise<{ submissions: HomeworkSubmissionDocument[]; totalItems: number; totalPages: number }> {
-        const skip = (page - 1) * limit;
-
-        // Строим фильтр
-        const matchFilter: any = {};
-
-        if (status) {
-            matchFilter.status = status;
-        }
-
-        if (courseId) {
-            matchFilter.courseId = courseId;
-        }
-
-        // Используем агрегацию для фильтрации по преподавателю через homework
-        const pipeline: any[] = [
-            {
-                $lookup: {
-                    from: 'homeworks',
-                    localField: 'homeworkId',
-                    foreignField: '_id',
-                    as: 'homework'
-                }
-            },
-            {
-                $unwind: '$homework'
-            },
-            {
-                $match: {
-                    'homework.teacherId': teacherId,
-                    ...matchFilter
-                }
-            },
-            {
-                $lookup: {
-                    from: 'users',
-                    localField: 'studentId',
-                    foreignField: '_id',
-                    as: 'student'
-                }
-            },
-            {
-                $lookup: {
-                    from: 'courses',
-                    localField: 'courseId',
-                    foreignField: '_id',
-                    as: 'course'
-                }
-            },
-            {
-                $sort: { submitted_at: -1 }
-            }
-        ];
-
-        const [submissions, totalCount] = await Promise.all([
-            this.submissionModel.aggregate([
-                ...pipeline,
-                { $skip: skip },
-                { $limit: limit }
-            ]).exec(),
-            this.submissionModel.aggregate([
-                ...pipeline,
-                { $count: 'total' }
-            ]).exec()
-        ]);
-
-        const totalItems = totalCount[0]?.total || 0;
-        const totalPages = Math.ceil(totalItems / limit);
-
-        return { submissions, totalItems, totalPages };
-    }
 
     /**
      * Получение отправок студента
@@ -541,80 +728,11 @@ export class HomeworkService {
         return savedHomework;
     }
 
-    /**
-     * Создать задания для всех студентов курса
-     */
-    private async createHomeworkForAllStudents(homeworkId: string, courseId: string) {
-        const subscriptions = await this.subscriptionModel.find({
-            course: courseId, // ИСПРАВЛЕНО: courseId -> course
-            status: { $in: ['paid', 'active'] }
-        }).populate('user');
 
-        this.logger.log(`Домашнее задание ${homeworkId} назначено ${subscriptions.length} студентам`);
-    }
 
-    /**
-     * Отправить выполненное домашнее задание
-     */
-    async submitHomework(homeworkId: string, file: Express.Multer.File, studentId: string) {
-        if (!file || !file.filename.endsWith('.zip')) {
-            throw new BadRequestException('Необходим ZIP файл с выполненным заданием');
-        }
 
-        const homework = await this.homeworkModel.findById(homeworkId);
-        if (!homework) {
-            throw new NotFoundException('Домашнее задание не найдено');
-        }
 
-        // Проверяем дедлайн
-        if (homework.deadline && new Date() > homework.deadline) {
-            throw new BadRequestException('Срок сдачи домашнего задания истек');
-        }
 
-        // Проверяем существующую отправку
-        const existingSubmission = await this.submissionModel.findOne({
-            homework: homeworkId,
-            student: studentId // ИСПРАВЛЕНО: studentId -> student
-        });
-
-        if (existingSubmission) {
-            throw new BadRequestException('Домашнее задание уже отправлено');
-        }
-
-        const fileUrl = `/uploads/homework-submissions/${file.filename}`;
-
-        const submission = new this.submissionModel({
-            homework: homeworkId,
-            student: studentId,
-            fileUrl: fileUrl,
-            status: SubmissionStatus.SUBMITTED
-        });
-
-        return submission.save();
-    }
-
-    /**
-     * Оценить домашнее задание
-     */
-    async gradeHomework(submissionId: string, gradeDto: { grade: number; feedback?: string }, teacherId: string) {
-        const submission = await this.submissionModel.findById(submissionId);
-        if (!submission) {
-            throw new NotFoundException('Отправка домашнего задания не найдена');
-        }
-
-        if (gradeDto.grade < 1 || gradeDto.grade > 5) {
-            throw new BadRequestException('Оценка должна быть от 1 до 5');
-        }
-
-        // Временно используем any для избежания ошибок типизации
-        (submission as any).grade = gradeDto.grade;
-        (submission as any).feedback = gradeDto.feedback;
-        (submission as any).status = 'graded'; // Используем строку вместо enum
-        (submission as any).gradedAt = new Date();
-        (submission as any).gradedBy = teacherId;
-
-        return submission.save();
-    }
 
 
     /**

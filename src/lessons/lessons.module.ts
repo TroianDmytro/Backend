@@ -12,15 +12,17 @@ import { User, UserSchema } from 'src/users/schemas/user.schema';
 import { SubjectsModule } from 'src/subjects/subjects.module';
 import { CoursesModule } from 'src/courses/courses.module';
 import { HomeworkModule } from 'src/homework/homework.module';
+import { Subscription, SubscriptionSchema } from 'src/subscriptions/schemas/subscription.schema';
 
 @Module({
     imports: [
         MongooseModule.forFeature([
             { name: Lesson.name, schema: LessonSchema },
             { name: Course.name, schema: CourseSchema },
-            { name: Subject.name, schema: SubjectSchema }, // НОВОЕ
+            { name: Subject.name, schema: SubjectSchema },
             { name: Teacher.name, schema: TeacherSchema },
-            { name: User.name, schema: UserSchema }
+            { name: User.name, schema: UserSchema },
+            { name: Subscription.name, schema: SubscriptionSchema }
         ]),
         forwardRef(() => SubjectsModule),
         forwardRef(() => CoursesModule), // Избегаем циклических зависимостей

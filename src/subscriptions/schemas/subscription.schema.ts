@@ -85,6 +85,12 @@ export class Subscription {
     @Prop({ default: false })
     canEnrollAfterStart: boolean; // может ли записаться после начала курса (только админ)
 
+    @Prop({ enum: ['self', 'admin'], default: 'self' })
+    enrolledBy: string;
+
+    @Prop({ default: Date.now })
+    enrolledAt: Date;
+
     createdAt: Date;
     updatedAt: Date;
 }

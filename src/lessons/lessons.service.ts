@@ -1,11 +1,12 @@
-// src/lessons/lessons.service.ts - ДОПОЛНЕНИЯ для работы с домашними заданиями
-import { Injectable, NotFoundException, ConflictException, Logger, BadRequestException } from '@nestjs/common';
+// src/lessons/lessons.service.ts 
+import { Injectable, NotFoundException, ConflictException, Logger, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Lesson, LessonDocument } from './schemas/lesson.schema';
 import { Course, CourseDocument } from '../courses/schemas/course.schema';
 import { UpdateLessonDto } from './dto/update-lesson.dto';
 import { User, UserDocument } from 'src/users/schemas/user.schema';
+import { Subscription, SubscriptionDocument } from 'src/subscriptions/schemas/subscription.schema';
 
 @Injectable()
 export class LessonsService {
@@ -15,6 +16,7 @@ export class LessonsService {
         @InjectModel(Lesson.name) private lessonModel: Model<LessonDocument>,
         @InjectModel(Course.name) private courseModel: Model<CourseDocument>,
         @InjectModel(User.name) private userModel: Model<UserDocument>,
+        @InjectModel(Subscription.name) private subscriptionModel: Model<SubscriptionDocument>
     ) { }
 
 
@@ -403,52 +405,239 @@ export class LessonsService {
         const lesson = new this.lessonModel(createLessonDto);
         return lesson.save();
     }
+
     /**
-     * Отметка посещаемости студентов
-     */
+       * НОВЫЙ МЕТОД: Отметить посещаемость студентов
+       */
     async markAttendance(
         lessonId: string,
-        attendanceData: {
-            userId: string;
+        attendanceData: Array<{
+            studentId: string;
             isPresent: boolean;
             lessonGrade?: number;
             notes?: string;
-        }[],
+        }>,
         teacherId: string
-    ) {
+    ): Promise<LessonDocument> {
+        this.logger.log(`Отметка посещаемости урока ${lessonId} преподавателем ${teacherId}`);
+
+        const lesson = await this.lessonModel.findById(lessonId)
+            .populate('course teacher');
+
+        if (!lesson) {
+            throw new NotFoundException('Урок не найден');
+        }
+
+        // Проверяем права преподавателя
+        if (lesson.teacher._id.toString() !== teacherId) {
+            throw new ForbiddenException('Только назначенный преподаватель может отмечать посещаемость');
+        }
+
+        // Валидация оценок
+        for (const attendance of attendanceData) {
+            if (attendance.lessonGrade && (attendance.lessonGrade < 1 || attendance.lessonGrade > 5)) {
+                throw new BadRequestException('Оценка за урок должна быть от 1 до 5');
+            }
+        }
+
+        // Обновляем посещаемость
+        for (const attendance of attendanceData) {
+            const existingIndex = lesson.attendance.findIndex(
+                a => a.user.toString() === attendance.studentId
+            );
+
+            const attendanceRecord = {
+                user: attendance.studentId as any,
+                isPresent: attendance.isPresent,
+                lessonGrade: attendance.lessonGrade,
+                notes: attendance.notes,
+                markedAt: new Date(),
+                markedBy: teacherId as any
+            };
+
+            if (existingIndex >= 0) {
+                // Обновляем существующую запись
+                lesson.attendance[existingIndex] = attendanceRecord;
+            } else {
+                // Добавляем новую запись
+                lesson.attendance.push(attendanceRecord);
+            }
+        }
+
+        const updatedLesson = await lesson.save();
+        this.logger.log(`Посещаемость урока ${lessonId} обновлена`);
+
+        return updatedLesson;
+    }
+
+    /**
+     * НОВЫЙ МЕТОД: Получить студентов курса для урока
+     */
+    async getStudentsForLesson(lessonId: string): Promise<any[]> {
+        this.logger.log(`Получение списка студентов для урока ${lessonId}`);
+
+        const lesson = await this.lessonModel.findById(lessonId)
+            .populate('course');
+
+        if (!lesson) {
+            throw new NotFoundException('Урок не найден');
+        }
+
+        // Получаем подписки на курс
+        const subscriptions = await this.subscriptionModel.find({
+            course: lesson.course._id,
+            status: { $in: ['active', 'paid'] }
+        }).populate('user', 'name email');
+
+        // Получаем текущую посещаемость для этого урока
+        const currentAttendance = lesson.attendance || [];
+        const attendanceMap = new Map(
+            currentAttendance.map(a => [a.user.toString(), a])
+        );
+
+        return subscriptions.map(sub => ({
+            student: sub.user,
+            currentAttendance: attendanceMap.get(sub.user._id.toString()) || {
+                isPresent: false,
+                lessonGrade: null,
+                notes: ''
+            }
+        }));
+    }
+
+    /**
+     * НОВЫЙ МЕТОД: Получить статистику посещаемости урока
+     */
+    async getLessonAttendanceStats(lessonId: string): Promise<any> {
+        this.logger.log(`Получение статистики посещаемости урока ${lessonId}`);
+
         const lesson = await this.lessonModel.findById(lessonId);
         if (!lesson) {
             throw new NotFoundException('Урок не найден');
         }
 
-        // Инициализируем массив посещаемости если его нет
-        if (!lesson.attendance) {
-            lesson.attendance = [];
+        const attendance = lesson.attendance || [];
+        const present = attendance.filter(a => a.isPresent).length;
+        const absent = attendance.filter(a => !a.isPresent).length;
+
+        // Средняя оценка за урок
+        const gradesGiven = attendance.filter(a => a.lessonGrade).map(a => a.lessonGrade);
+        const averageGrade = gradesGiven.length > 0
+            ? gradesGiven.reduce((sum, grade) => sum + grade, 0) / gradesGiven.length
+            : 0;
+
+        return {
+            lessonId,
+            totalStudents: attendance.length,
+            present,
+            absent,
+            attendanceRate: attendance.length > 0 ? (present / attendance.length) * 100 : 0,
+            gradesGiven: gradesGiven.length,
+            averageGrade: Math.round(averageGrade * 100) / 100
+        };
+    }
+
+    /**
+     * НОВЫЙ МЕТОД: Обновить расписание урока (админ)
+     */
+    async updateLessonSchedule(
+        lessonId: string,
+        scheduleData: {
+            date?: Date;
+            startTime?: string;
+            endTime?: string;
+        },
+        userId: string,
+        isAdmin: boolean
+    ): Promise<LessonDocument> {
+        this.logger.log(`Обновление расписания урока ${lessonId}`);
+
+        if (!isAdmin) {
+            throw new ForbiddenException('Только администратор может изменять расписание уроков');
         }
 
-        // Обновляем или добавляем записи о посещаемости
-        for (const data of attendanceData) {
-            const existingIndex = lesson.attendance.findIndex(
-                a => a.user.toString() === data.userId
-            );
+        const lesson = await this.lessonModel.findById(lessonId);
+        if (!lesson) {
+            throw new NotFoundException('Урок не найден');
+        }
 
-            const attendanceRecord = {
-                user: new Types.ObjectId(data.userId),
-                isPresent: data.isPresent,
-                lessonGrade: data.lessonGrade,
-                notes: data.notes,
-                markedAt: new Date(),
-                markedBy: new Types.ObjectId(teacherId)
-            };
+        // Проверяем корректность времени
+        if (scheduleData.startTime && scheduleData.endTime) {
+            const startTime = new Date(`1970-01-01T${scheduleData.startTime}:00`);
+            const endTime = new Date(`1970-01-01T${scheduleData.endTime}:00`);
 
-            if (existingIndex >= 0) {
-                lesson.attendance[existingIndex] = attendanceRecord;
-            } else {
-                lesson.attendance.push(attendanceRecord);
+            if (startTime >= endTime) {
+                throw new BadRequestException('Время начала должно быть раньше времени окончания');
             }
         }
 
-        return await lesson.save();
+        const updateData: any = {};
+        if (scheduleData.date) updateData.date = scheduleData.date;
+        if (scheduleData.startTime) updateData.startTime = scheduleData.startTime;
+        if (scheduleData.endTime) updateData.endTime = scheduleData.endTime;
+
+        const updatedLesson = await this.lessonModel.findByIdAndUpdate(
+            lessonId,
+            updateData,
+            { new: true }
+        ).populate(['course', 'subject', 'teacher']);
+
+        if (!updatedLesson) {
+            throw new NotFoundException('Не удалось обновить урок');
+        }
+
+        this.logger.log(`Расписание урока ${lessonId} обновлено`);
+        return updatedLesson;
+    }
+
+    /**
+     * НОВЫЙ МЕТОД: Получить уроки с посещаемостью для курса
+     */
+    async getLessonsWithAttendance(
+        courseId: string,
+        studentId?: string
+    ): Promise<any[]> {
+        this.logger.log(`Получение уроков с посещаемостью для курса ${courseId}`);
+
+        const lessons = await this.lessonModel.find({
+            course: courseId,
+            isActive: true
+        })
+            .populate(['subject', 'teacher'])
+            .sort({ date: 1, startTime: 1 });
+
+        return lessons.map(lesson => {
+            const lessonObj = lesson.toObject();
+
+            if (studentId) {
+                // Если указан конкретный студент, возвращаем его посещаемость
+                const studentAttendance = lesson.attendance.find(
+                    a => a.user.toString() === studentId
+                );
+
+                return {
+                    ...lessonObj,
+                    myAttendance: studentAttendance || {
+                        isPresent: false,
+                        lessonGrade: null,
+                        notes: ''
+                    }
+                };
+            } else {
+                // Возвращаем общую статистику
+                const present = lesson.attendance.filter(a => a.isPresent).length;
+                const total = lesson.attendance.length;
+
+                return {
+                    ...lessonObj,
+                    attendanceStats: {
+                        present,
+                        total,
+                        attendanceRate: total > 0 ? (present / total) * 100 : 0
+                    }
+                };
+            }
+        });
     }
 
     /**
@@ -482,7 +671,7 @@ export class LessonsService {
         if (scheduleData.startTime && scheduleData.endTime) {
             const startTime = new Date(`1970-01-01T${scheduleData.startTime}:00`);
             const endTime = new Date(`1970-01-01T${scheduleData.endTime}:00`);
-            
+
             if (startTime >= endTime) {
                 throw new BadRequestException('Время начала должно быть раньше времени окончания');
             }

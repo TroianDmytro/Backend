@@ -12,7 +12,8 @@ import {
     Request,
     Logger,
     NotFoundException,
-    ForbiddenException
+    ForbiddenException,
+    Req
 } from '@nestjs/common';
 import {
     ApiTags,
@@ -837,99 +838,174 @@ export class CoursesController {
                 itemsPerPage: limit
             }
         };
-
-
     }
 
     /**
-* Добавить предмет к курсу(только админ)
-           */
+        * POST /courses/:id/subjects - Добавить предмет к курсу
+        */
     @Post(':id/subjects')
     @UseGuards(RolesGuard)
-    @Roles('admin')
-    @ApiOperation({ summary: 'Добавить предмет к курсу с назначением преподавателя' })
+    @Roles('admin', 'teacher')
+    @ApiOperation({
+        summary: 'Добавить предмет к курсу с назначением преподавателя',
+        description: 'Добавляет предмет к курсу и назначает ему преподавателя. Только админы и владельцы курса.'
+    })
+    @ApiParam({ name: 'id', description: 'ID курса' })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                subjectId: { type: 'string', description: 'ID предмета' },
+                teacherId: { type: 'string', description: 'ID преподавателя' },
+                startDate: { type: 'string', format: 'date', description: 'Дата начала предмета' }
+            },
+            required: ['subjectId', 'teacherId', 'startDate']
+        }
+    })
     @ApiResponse({ status: 200, description: 'Предмет успешно добавлен к курсу' })
+    @ApiResponse({ status: 403, description: 'Нет прав доступа' })
+    @ApiResponse({ status: 404, description: 'Курс, предмет или преподаватель не найден' })
+    @ApiResponse({ status: 409, description: 'Предмет уже добавлен к курсу' })
     async addSubjectToCourse(
         @Param('id') courseId: string,
         @Body() addSubjectDto: {
             subjectId: string;
-            teacherId?: string;
-            startDate: Date;
-        }
+            teacherId: string;
+            startDate: string;
+        },
+        @Request() req: any
     ) {
         this.logger.log(`Добавление предмета ${addSubjectDto.subjectId} к курсу ${courseId}`);
-        return this.coursesService.addSubjectToCourse(courseId, addSubjectDto);
-    }
 
-    /**
-     * Получить предметы курса
-     */
-    @Get(':id/subjects')
-    @ApiOperation({ summary: 'Получить список предметов курса' })
-    @ApiResponse({ status: 200, description: 'Список предметов курса' })
-    async getCourseSubjects(@Param('id') courseId: string) {
-        this.logger.log(`Получение предметов курса ${courseId}`);
-        return this.coursesService.getCourseSubjects(courseId);
-    }
+        const startDate = new Date(addSubjectDto.startDate);
+        const userId = req.user?.userId || req.user?.id;
+        const isAdmin = req.user?.roles?.includes('admin') || false;
 
-    /**
-     * Удалить предмет из курса (только админ)
-     */
-    @Delete(':courseId/subjects/:subjectId')
-    @UseGuards(RolesGuard)
-    @Roles('admin')
-    @ApiOperation({ summary: 'Удалить предмет из курса' })
-    @ApiResponse({ status: 200, description: 'Предмет успешно удален из курса' })
-    async removeSubjectFromCourse(
-        @Param('courseId') courseId: string,
-        @Param('subjectId') subjectId: string
-    ) {
-        this.logger.log(`Удаление предмета ${subjectId} из курса ${courseId}`);
-        return this.coursesService.removeSubjectFromCourse(courseId, subjectId);
-    }
-
-    /**
-     * Записаться на курс (проверка оплаты и даты начала)
-     */
-    @Post(':id/enroll')
-    @ApiOperation({
-        summary: 'Записаться на курс',
-        description: 'Записывает пользователя на курс с проверкой оплаты и даты начала. Доступно только до начала курса и после оплаты.'
-    })
-    @ApiParam({ name: 'id', description: 'ID курса' })
-    @ApiResponse({ status: 200, description: 'Успешная запись на курс' })
-    @ApiResponse({ status: 400, description: 'Курс уже начался или не оплачен' })
-    @ApiResponse({ status: 409, description: 'Пользователь уже записан на курс' })
-    async enrollInCourse(
-        @Param('id') courseId: string,
-        @Body() enrollDto: { paymentId?: string },
-        @GetUser() currentUser: any
-    ) {
-        this.logger.log(`Запись пользователя ${currentUser.userId} на курс ${courseId}`);
-
-        const result = await this.coursesService.enrollInCourse(courseId, {
-            userId: currentUser.userId,
-            paymentId: enrollDto.paymentId
-        });
+        const updatedCourse = await this.coursesService.addSubjectToCourse(
+            courseId,
+            addSubjectDto.subjectId,
+            addSubjectDto.teacherId,
+            startDate,
+            userId,
+            isAdmin
+        );
 
         return {
             success: true,
-            message: 'Вы успешно записались на курс',
-            subscription: result
+            message: 'Предмет успешно добавлен к курсу',
+            course: updatedCourse
         };
     }
 
     /**
-     * Административная запись на курс (может быть после начала курса)
+     * DELETE /courses/:courseId/subjects/:subjectId - Удалить предмет из курса
+     */
+    @Delete(':courseId/subjects/:subjectId')
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'teacher')
+    @ApiOperation({ summary: 'Удалить предмет из курса' })
+    @ApiParam({ name: 'courseId', description: 'ID курса' })
+    @ApiParam({ name: 'subjectId', description: 'ID предмета' })
+    @ApiResponse({ status: 200, description: 'Предмет удален из курса' })
+    async removeSubjectFromCourse(
+        @Param('courseId') courseId: string,
+        @Param('subjectId') subjectId: string,
+        @Request() req: any
+    ) {
+        this.logger.log(`Удаление предмета ${subjectId} из курса ${courseId}`);
+
+        const userId = req.user?.userId || req.user?.id;
+        const isAdmin = req.user?.roles?.includes('admin') || false;
+
+        const updatedCourse = await this.coursesService.removeSubjectFromCourse(
+            courseId,
+            subjectId,
+            userId,
+            isAdmin
+        );
+
+        return {
+            success: true,
+            message: 'Предмет успешно удален из курса',
+            course: updatedCourse
+        };
+    }
+
+    /**
+     * GET /courses/:id/subjects - Получить предметы курса
+     */
+    @Get(':id/subjects')
+    @ApiOperation({
+        summary: 'Получить предметы курса',
+        description: 'Возвращает список всех предметов курса с назначенными преподавателями'
+    })
+    @ApiParam({ name: 'id', description: 'ID курса' })
+    @ApiResponse({ status: 200, description: 'Список предметов курса' })
+    async getCourseSubjects(@Param('id') courseId: string) {
+        this.logger.log(`Получение предметов курса ${courseId}`);
+
+        const subjects = await this.coursesService.getCourseSubjects(courseId);
+
+        return {
+            success: true,
+            courseId,
+            subjects
+        };
+    }
+
+    /**
+     * POST /courses/:id/enroll - Записаться на курс
+     */
+    @Post(':id/enroll')
+    @ApiOperation({
+        summary: 'Записаться на курс',
+        description: 'Записывает пользователя на курс. Проверяет даты начала и оплату.'
+    })
+    @ApiParam({ name: 'id', description: 'ID курса' })
+    @ApiResponse({ status: 200, description: 'Успешная запись на курс' })
+    @ApiResponse({ status: 400, description: 'Курс уже начался или требуется оплата' })
+    @ApiResponse({ status: 409, description: 'Уже записан на курс или достигнут лимит' })
+    async enrollInCourse(
+        @Param('id') courseId: string,
+        @Request() req: any
+    ) {
+        const userId = req.user?.userId || req.user?.id;
+        this.logger.log(`Запись пользователя ${userId} на курс ${courseId}`);
+
+        const subscription = await this.coursesService.enrollInCourse(
+            courseId,
+            userId,
+            false // не админ
+        );
+
+        return {
+            success: true,
+            message: 'Успешная запись на курс',
+            subscription
+        };
+    }
+
+    /**
+     * POST /courses/:id/admin-enroll - Административная запись на курс
      */
     @Post(':id/admin-enroll')
     @UseGuards(RolesGuard)
     @Roles('admin')
     @ApiOperation({
         summary: 'Административная запись на курс',
-        description: 'Записывает пользователя на курс в режиме администратора. Может быть выполнена даже после начала курса.'
+        description: 'Может быть выполнена даже после начала курса.'
     })
     @ApiParam({ name: 'id', description: 'ID курса' })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                userId: { type: 'string', description: 'ID пользователя' },
+                forceEnroll: { type: 'boolean', description: 'Принудительная запись' }
+            },
+            required: ['userId']
+        }
+    })
     @ApiResponse({ status: 200, description: 'Успешная административная запись на курс' })
     @ApiResponse({ status: 409, description: 'Пользователь уже записан на курс' })
     async adminEnrollInCourse(
@@ -948,7 +1024,7 @@ export class CoursesController {
     }
 
     /**
-     * Обновление даты начала курса (только админ)
+     * PUT /courses/:id/start-date - Обновление даты начала курса (только админ)
      */
     @Put(':id/start-date')
     @UseGuards(RolesGuard)
@@ -983,31 +1059,4 @@ export class CoursesController {
         };
     }
 
-
-    /**
-     * Объяснение новых эндпоинтов курсов:
-     * 
-     * 1. **Структура маршрутов по категориям:**
-     *    - GET /courses/category/:categoryId - карточки курсов
-     *    - GET /courses/category/:categoryId/full - полная информация
-     *    - GET /courses/category/:categoryId/admin - админская информация
-     * 
-     * 2. **Структура маршрутов по уровням сложности:**
-     *    - GET /courses/difficulty/:difficultyLevelId - карточки курсов
-     *    - GET /courses/difficulty/:difficultyLevelId/full - полная информация
-     *    - GET /courses/difficulty/:difficultyLevelId/admin - админская информация
-     * 
-     * 3. **Три уровня детализации:**
-     *    - 'card' - краткая информация для карточек (публичный доступ)
-     *    - 'full' - подробная информация без админских данных (публичный доступ)
-     *    - 'admin' - вся информация включая админские данные (только админы/владельцы)
-     * 
-     * 4. **Пагинация:**
-     *    - Все эндпоинты поддерживают пагинацию
-     *    - По умолчанию: page=1, limit=12
-     * 
-     * 5. **Авторизация:**
-     *    - Админские эндпоинты требуют JWT + роль admin/owner
-     *    - Публичные эндпоинты доступны всем
-     */
 }

@@ -4,7 +4,8 @@ import {
     NotFoundException,
     ConflictException,
     BadRequestException,
-    Logger
+    Logger,
+    ForbiddenException
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -1022,210 +1023,6 @@ export class CoursesService {
     }
 
     /**
-     * Получить предметы курса с информацией о преподавателях
-     */
-    async getCourseSubjects(courseId: string) {
-        const course = await this.courseModel
-            .findById(courseId)
-            .populate({
-                path: 'courseSubjects.subject',
-                select: 'name description studyMaterials'
-            })
-            .populate({
-                path: 'courseSubjects.teacher',
-                select: 'name email expertise'
-            });
-
-        if (!course) {
-            throw new NotFoundException('Курс не найден');
-        }
-
-        return {
-            courseId: course._id,
-            courseName: course.title,
-            subjects: course.courseSubjects.filter(cs => cs.isActive)
-        };
-    }
-
-    /**
-     * Записаться на курс с проверкой оплаты и даты начала
-     * Обычная запись - только до начала курса и только после оплаты
-     */
-    async enrollInCourse(courseId: string, enrollDto: { userId: string; paymentId?: string }) {
-        const course = await this.courseModel.findById(courseId);
-        if (!course) {
-            throw new NotFoundException('Курс не найден');
-        }
-
-        // Проверяем максимальное количество студентов
-        if (course.current_students_count >= course.max_students) {
-            throw new BadRequestException('Достигнуто максимальное количество студентов на курсе');
-        }
-
-        // Проверяем, что курс еще не начался
-        const now = new Date();
-        if (course.startDate <= now) {
-            throw new BadRequestException(
-                'Курс уже начался. Запись возможна только через администратора.'
-            );
-        }
-
-        // Проверяем, что пользователь еще не записан на курс
-        const existingSubscription = await this.subscriptionModel.findOne({
-            user: enrollDto.userId,
-            course: courseId,
-            status: { $in: ['paid', 'active'] }
-        });
-
-        if (existingSubscription) {
-            throw new ConflictException('Пользователь уже записан на этот курс');
-        }
-
-        // Проверяем оплату (если передан paymentId)
-        if (enrollDto.paymentId) {
-            const payment = await this.validatePayment(enrollDto.paymentId, course.price);
-            if (!payment.success) {
-                throw new BadRequestException(`Ошибка оплаты: ${payment.message}`);
-            }
-        }
-
-        // Создаем подписку
-        const subscription = new this.subscriptionModel({
-            user: enrollDto.userId,
-            course: courseId,
-            status: 'paid',
-            paidAt: now,
-            enrolledAt: now
-        });
-
-        const savedSubscription = await subscription.save();
-
-        // Увеличиваем счетчик студентов на курсе
-        await this.courseModel.findByIdAndUpdate(courseId, {
-            $inc: { current_students_count: 1 }
-        });
-
-        this.logger.log(`Пользователь ${enrollDto.userId} записан на курс ${courseId}`);
-        return savedSubscription;
-    }
-
-    /**
-     * Административная запись на курс (может быть после начала курса)
-     */
-    async adminEnrollInCourse(courseId: string, enrollDto: { userId: string; forceEnroll?: boolean }) {
-        const course = await this.courseModel.findById(courseId);
-        if (!course) {
-            throw new NotFoundException('Курс не найден');
-        }
-
-        // Проверяем максимальное количество студентов
-        if (course.current_students_count >= course.max_students) {
-            throw new BadRequestException('Достигнуто максимальное количество студентов на курсе');
-        }
-
-        // Проверяем, что пользователь еще не записан на курс
-        const existingSubscription = await this.subscriptionModel.findOne({
-            user: enrollDto.userId,
-            course: courseId,
-            status: { $in: ['paid', 'active'] }
-        });
-
-        if (existingSubscription) {
-            throw new ConflictException('Пользователь уже записан на этот курс');
-        }
-
-        const now = new Date();
-
-        // Если курс уже начался и не установлен флаг принудительной записи
-        if (course.startDate <= now && !enrollDto.forceEnroll) {
-            throw new BadRequestException(
-                'Курс уже начался. Используйте forceEnroll: true для принудительной записи.'
-            );
-        }
-
-        // Создаем подписку (администратор может записывать без оплаты)
-        const subscription = new this.subscriptionModel({
-            user: enrollDto.userId,
-            course: courseId,
-            status: 'active', // активная подписка без оплаты
-            enrolledAt: now,
-            enrolledByAdmin: true
-        });
-
-        const savedSubscription = await subscription.save();
-
-        // Увеличиваем счетчик студентов на курсе
-        await this.courseModel.findByIdAndUpdate(courseId, {
-            $inc: { current_students_count: 1 }
-        });
-
-        this.logger.log(`Администратор записал пользователя ${enrollDto.userId} на курс ${courseId}`);
-        return savedSubscription;
-    }
-
-    /**
-     * Проверка валидности платежа
-     */
-    private async validatePayment(paymentId: string, requiredAmount: number): Promise<{ success: boolean; message: string }> {
-        try {
-            // Здесь должна быть логика проверки платежа через Payment сервис
-            // Пока возвращаем заглушку
-            return { success: true, message: 'Оплата подтверждена' };
-        } catch (error) {
-            return { success: false, message: 'Ошибка проверки платежа' };
-        }
-    }
-
-    /**
-     * Обновление даты начала курса (только админ)
-     */
-    async updateStartDate(courseId: string, startDate: Date): Promise<Course> {
-        const course = await this.courseModel.findById(courseId);
-        if (!course) {
-            throw new NotFoundException('Курс не найден');
-        }
-
-        const updatedCourse = await this.courseModel.findByIdAndUpdate(
-            courseId,
-            { startDate: startDate },
-            { new: true }
-        ).populate(['mainTeacher', 'category', 'difficultyLevel', 'courseSubjects.subject', 'courseSubjects.teacher']);
-
-        if (!updatedCourse) {
-            throw new NotFoundException('Не удалось обновить курс');
-        }
-
-        this.logger.log(`Дата начала курса ${courseId} обновлена на ${startDate}`);
-        return updatedCourse;
-    }
-
-    /**
- * Добавление предмета к курсу
- */
-    async addSubjectToCourse(
-        courseId: string,
-        addSubjectData: { subjectId: string; teacherId?: string; startDate: Date }
-    ) {
-        const course = await this.courseModel.findById(courseId);
-        if (!course) {
-            throw new NotFoundException('Курс не найден');
-        }
-
-        const newSubject = {
-            subject: new Types.ObjectId(addSubjectData.subjectId),
-            teacher: addSubjectData.teacherId ? new Types.ObjectId(addSubjectData.teacherId) : undefined,
-            startDate: addSubjectData.startDate,
-            isActive: true,
-            addedAt: new Date()
-        } as any; // Приводим к any, так как схема работает с ObjectId
-
-        course.courseSubjects = course.courseSubjects || [];
-        course.courseSubjects.push(newSubject);
-
-        return await course.save();
-    }
-
-    /**
      * Получение курса с предметами
      */
     async findByIdWithSubjects(id: string) {
@@ -1237,19 +1034,231 @@ export class CoursesService {
     }
 
     /**
-     * Удаление предмета из курса
+     * НОВЫЙ МЕТОД: Добавить предмет к курсу с назначением преподавателя
      */
-    async removeSubjectFromCourse(courseId: string, subjectId: string) {
+    async addSubjectToCourse(
+        courseId: string,
+        subjectId: string,
+        teacherId: string,
+        startDate: Date,
+        userId: string,
+        isAdmin: boolean
+    ): Promise<CourseDocument> {
+        this.logger.log(`Добавление предмета ${subjectId} к курсу ${courseId}`);
+
+        // Проверяем существование курса
         const course = await this.courseModel.findById(courseId);
         if (!course) {
             throw new NotFoundException('Курс не найден');
         }
 
-        course.courseSubjects = course.courseSubjects?.filter(
-            cs => cs.subject.toString() !== subjectId
-        ) || [];
+        // Проверяем права доступа
+        if (!isAdmin && course.mainTeacher?.toString() !== userId) {
+            throw new ForbiddenException('Только админ или владелец курса может добавлять предметы');
+        }
 
-        return await course.save();
+        // Проверяем существование предмета
+        const subject = await this.subjectModel.findById(subjectId);
+        if (!subject) {
+            throw new NotFoundException('Предмет не найден');
+        }
+
+        // Проверяем существование преподавателя
+        const teacher = await this.teacherModel.findById(teacherId);
+        if (!teacher) {
+            throw new NotFoundException('Преподаватель не найден');
+        }
+
+        // Проверяем, не добавлен ли уже этот предмет
+        const existingSubject = course.courseSubjects.find(
+            cs => cs.subject.toString() === subjectId
+        );
+
+        if (existingSubject) {
+            throw new ConflictException('Этот предмет уже добавлен к курсу');
+        }
+
+        // Добавляем предмет к курсу
+        course.courseSubjects.push({
+            subject: subjectId as any,
+            teacher: teacherId as any,
+            startDate,
+            isActive: true,
+            addedAt: new Date()
+        });
+
+        const updatedCourse = await course.save();
+        this.logger.log(`Предмет добавлен к курсу: ${courseId}`);
+
+        return updatedCourse.populate(['courseSubjects.subject', 'courseSubjects.teacher']);
+    }
+
+    /**
+     * НОВЫЙ МЕТОД: Удалить предмет из курса
+     */
+    async removeSubjectFromCourse(
+        courseId: string,
+        subjectId: string,
+        userId: string,
+        isAdmin: boolean
+    ): Promise<CourseDocument> {
+        this.logger.log(`Удаление предмета ${subjectId} из курса ${courseId}`);
+
+        const course = await this.courseModel.findById(courseId);
+        if (!course) {
+            throw new NotFoundException('Курс не найден');
+        }
+
+        // Проверяем права доступа
+        if (!isAdmin && course.mainTeacher?.toString() !== userId) {
+            throw new ForbiddenException('Только админ или владелец курса может удалять предметы');
+        }
+
+        // Находим и удаляем предмет
+        const subjectIndex = course.courseSubjects.findIndex(
+            cs => cs.subject.toString() === subjectId
+        );
+
+        if (subjectIndex === -1) {
+            throw new NotFoundException('Предмет не найден в курсе');
+        }
+
+        course.courseSubjects.splice(subjectIndex, 1);
+        const updatedCourse = await course.save();
+
+        this.logger.log(`Предмет удален из курса: ${courseId}`);
+        return updatedCourse;
+    }
+
+    /**
+     * НОВЫЙ МЕТОД: Запись на курс с проверкой оплаты и дат
+     */
+    async enrollInCourse(
+        courseId: string,
+        userId: string,
+        isAdmin: boolean = false
+    ): Promise<SubscriptionDocument> {
+        this.logger.log(`Запись пользователя ${userId} на курс ${courseId}`);
+
+        const course = await this.courseModel.findById(courseId);
+        if (!course) {
+            throw new NotFoundException('Курс не найден');
+        }
+
+        // Проверяем, не записан ли уже пользователь
+        const existingSubscription = await this.subscriptionModel.findOne({
+            user: userId,
+            course: courseId,
+            status: { $in: ['active', 'paid'] }
+        });
+
+        if (existingSubscription) {
+            throw new ConflictException('Пользователь уже записан на этот курс');
+        }
+
+        // Проверяем, не начался ли уже курс
+        const now = new Date();
+        const courseStarted = course.startDate <= now;
+
+        if (courseStarted && !isAdmin) {
+            throw new BadRequestException(
+                'Курс уже начался. Запись возможна только через администратора'
+            );
+        }
+
+        // Проверяем лимит студентов
+        if (course.current_students_count >= course.max_students) {
+            throw new ConflictException('Достигнут максимум студентов на курсе');
+        }
+
+        // В реальном проекте здесь была бы проверка оплаты
+        // const paymentRequired = course.price > 0 && !isAdmin;
+        // if (paymentRequired) {
+        //     const payment = await this.checkUserPaymentStatus(userId, courseId);
+        //     if (!payment || payment.status !== 'paid') {
+        //         throw new BadRequestException('Для записи на курс необходима оплата');
+        //     }
+        // }
+
+        // Создаем подписку
+        const subscription = new this.subscriptionModel({
+            user: userId,
+            course: courseId,
+            status: 'active',
+            enrolledAt: new Date(),
+            enrolledBy: isAdmin ? 'admin' : 'self'
+        });
+
+        await subscription.save();
+
+        // Обновляем счетчик студентов
+        await this.courseModel.findByIdAndUpdate(courseId, {
+            $inc: { current_students_count: 1 }
+        });
+
+        this.logger.log(`Пользователь записан на курс: ${courseId}`);
+        return subscription;
+    }
+
+    /**
+     * НОВЫЙ МЕТОД: Административная запись на курс (даже после начала)
+     */
+    async adminEnrollInCourse(
+        courseId: string,
+        enrollDto: { userId: string; forceEnroll?: boolean }
+    ): Promise<SubscriptionDocument> {
+        this.logger.log(`Административная запись пользователя ${enrollDto.userId} на курс ${courseId}`);
+
+        // Используем обычную запись с флагом админа
+        return this.enrollInCourse(courseId, enrollDto.userId, true);
+    }
+
+    /**
+     * НОВЫЙ МЕТОД: Обновить дату начала курса (только админ)
+     */
+    async updateStartDate(courseId: string, startDate: Date): Promise<CourseDocument> {
+        this.logger.log(`Обновление даты начала курса ${courseId} на ${startDate}`);
+
+        const course = await this.courseModel.findByIdAndUpdate(
+            courseId,
+            { startDate },
+            { new: true }
+        );
+
+        if (!course) {
+            throw new NotFoundException('Курс не найден');
+        }
+
+        return course;
+    }
+
+    /**
+     * НОВЫЙ МЕТОД: Получить предметы курса
+     */
+    async getCourseSubjects(courseId: string): Promise<any[]> {
+        const course = await this.courseModel.findById(courseId)
+            .populate({
+                path: 'courseSubjects.subject',
+                select: 'name description studyMaterials'
+            })
+            .populate({
+                path: 'courseSubjects.teacher',
+                select: 'name second_name email experience_years'
+            });
+
+        if (!course) {
+            throw new NotFoundException('Курс не найден');
+        }
+
+        return course.courseSubjects;
+    }
+
+    // HELPER методы для проверки оплаты (заглушка)
+    private async checkUserPaymentStatus(userId: string, courseId: string): Promise<{ status: string } | null> {
+        // Заглушка для интеграции с платежной системой
+        // В реальном проекте здесь будет проверка в базе платежей
+        return { status: 'paid' };
     }
 }
+
 

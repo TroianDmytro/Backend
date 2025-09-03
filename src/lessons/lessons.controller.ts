@@ -14,6 +14,7 @@ import {
     NotFoundException,
     UseInterceptors,
     UploadedFile,
+    Req,
 } from '@nestjs/common';
 import {
     ApiTags,
@@ -44,7 +45,7 @@ export class LessonsController {
 
     constructor(private readonly lessonsService: LessonsService) {
 
-     }
+    }
 
     @Post()
     @UseGuards(JwtAuthGuard, RolesGuard)
@@ -270,26 +271,193 @@ export class LessonsController {
     }
 
     /**
- * Отметить посещаемость занятия (только преподаватель)
- */
+    * POST /lessons/:id/attendance - Отметить посещаемость на уроке
+    */
     @Post(':id/attendance')
     @UseGuards(RolesGuard)
     @Roles('teacher', 'admin')
-    @ApiOperation({ summary: 'Отметить посещаемость студентов на занятии' })
+    @ApiOperation({
+        summary: 'Отметить посещаемость студентов на уроке',
+        description: 'Преподаватель отмечает присутствующих и выставляет оценки за занятие'
+    })
+    @ApiParam({ name: 'id', description: 'ID урока' })
+    @ApiBody({
+        schema: {
+            type: 'array',
+            items: {
+                type: 'object',
+                properties: {
+                    studentId: { type: 'string', description: 'ID студента' },
+                    isPresent: { type: 'boolean', description: 'Присутствовал ли студент' },
+                    lessonGrade: { type: 'number', minimum: 1, maximum: 5, description: 'Оценка за урок (1-5)' },
+                    notes: { type: 'string', description: 'Дополнительные заметки' }
+                },
+                required: ['studentId', 'isPresent']
+            }
+        }
+    })
     @ApiResponse({ status: 200, description: 'Посещаемость успешно отмечена' })
+    @ApiResponse({ status: 403, description: 'Только назначенный преподаватель может отмечать посещаемость' })
     async markAttendance(
         @Param('id') lessonId: string,
-        @Body() attendanceData: {
-            userId: string;
+        @Body() attendanceDto: Array<{
+            studentId: string;
             isPresent: boolean;
             lessonGrade?: number;
             notes?: string;
-        }[],
-        @GetUser() teacher: any
+        }>,
+        @Request() req: any
     ) {
-        this.logger.log(`Отметка посещаемости для занятия ${lessonId}`);
-        return this.lessonsService.markAttendance(lessonId, attendanceData, teacher._id);
+        this.logger.log(`Отметка посещаемости урока ${lessonId}`);
+
+        const teacherId = req.user?.userId || req.user?.id;
+
+        const updatedLesson = await this.lessonsService.markAttendance(
+            lessonId,
+            attendanceDto,
+            teacherId
+        );
+
+        return {
+            success: true,
+            message: 'Посещаемость успешно отмечена',
+            lesson: updatedLesson
+        };
     }
+
+    /**
+     * GET /lessons/:id/students - Получить список студентов для отметки посещаемости
+     */
+    @Get(':id/students')
+    @UseGuards(RolesGuard)
+    @Roles('teacher', 'admin')
+    @ApiOperation({
+        summary: 'Получить список студентов курса для урока',
+        description: 'Возвращает всех студентов, записанных на курс, с текущей посещаемостью урока'
+    })
+    @ApiParam({ name: 'id', description: 'ID урока' })
+    @ApiResponse({ status: 200, description: 'Список студентов получен' })
+    async getStudentsForLesson(@Param('id') lessonId: string) {
+        this.logger.log(`Получение студентов для урока ${lessonId}`);
+
+        const students = await this.lessonsService.getStudentsForLesson(lessonId);
+
+        return {
+            success: true,
+            lessonId,
+            students
+        };
+    }
+
+    /**
+     * GET /lessons/:id/attendance-stats - Получить статистику посещаемости урока
+     */
+    @Get(':id/attendance-stats')
+    @UseGuards(RolesGuard)
+    @Roles('teacher', 'admin')
+    @ApiOperation({ summary: 'Получить статистику посещаемости урока' })
+    @ApiParam({ name: 'id', description: 'ID урока' })
+    @ApiResponse({ status: 200, description: 'Статистика посещаемости' })
+    async getLessonAttendanceStats(@Param('id') lessonId: string) {
+        this.logger.log(`Получение статистики посещаемости урока ${lessonId}`);
+
+        const stats = await this.lessonsService.getLessonAttendanceStats(lessonId);
+
+        return {
+            success: true,
+            stats
+        };
+    }
+
+    /**
+     * PUT /lessons/:id/schedule - Обновить расписание урока (только админ)
+     */
+    @Put(':id/schedule')
+    @UseGuards(RolesGuard)
+    @Roles('admin')
+    @ApiOperation({
+        summary: 'Обновить расписание урока',
+        description: 'Позволяет администратору изменить дату и время урока'
+    })
+    @ApiParam({ name: 'id', description: 'ID урока' })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: {
+                date: { type: 'string', format: 'date', description: 'Новая дата урока' },
+                startTime: { type: 'string', pattern: '^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$', description: 'Время начала (HH:MM)' },
+                endTime: { type: 'string', pattern: '^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$', description: 'Время окончания (HH:MM)' }
+            }
+        }
+    })
+    @ApiResponse({ status: 200, description: 'Расписание урока обновлено' })
+    @ApiResponse({ status: 400, description: 'Некорректное время' })
+    async updateLessonSchedule(
+        @Param('id') lessonId: string,
+        @Body() scheduleData: {
+            date?: string;
+            startTime?: string;
+            endTime?: string;
+        },
+        @Request() req: any
+    ) {
+        this.logger.log(`Обновление расписания урока ${lessonId}`);
+
+        const userId = req.user?.userId || req.user?.id;
+        const isAdmin = req.user?.roles?.includes('admin') || false;
+
+        const updateData: any = {};
+        if (scheduleData.date) updateData.date = new Date(scheduleData.date);
+        if (scheduleData.startTime) updateData.startTime = scheduleData.startTime;
+        if (scheduleData.endTime) updateData.endTime = scheduleData.endTime;
+
+        const updatedLesson = await this.lessonsService.updateLessonSchedule(
+            lessonId,
+            updateData,
+            userId,
+            isAdmin
+        );
+
+        return {
+            success: true,
+            message: 'Расписание урока успешно обновлено',
+            lesson: updatedLesson
+        };
+    }
+
+    /**
+     * GET /lessons/course/:courseId/attendance - Получить уроки с посещаемостью
+     */
+    @Get('course/:courseId/attendance')
+    @ApiOperation({
+        summary: 'Получить уроки курса с данными о посещаемости',
+        description: 'Возвращает все уроки курса с информацией о посещаемости студентов'
+    })
+    @ApiParam({ name: 'courseId', description: 'ID курса' })
+    @ApiQuery({ name: 'studentId', required: false, description: 'ID конкретного студента (для получения его посещаемости)' })
+    @ApiResponse({ status: 200, description: 'Уроки с данными посещаемости' })
+    async getLessonsWithAttendance(
+        @Param('courseId') courseId: string,
+        @Query('studentId') studentId?: string,
+        @Request() req?: any
+    ) {
+        this.logger.log(`Получение уроков с посещаемостью для курса ${courseId}`);
+
+        // Если studentId не указан в запросе, берем из токена пользователя (если это студент)
+        const finalStudentId = studentId || (req?.user?.roles?.includes('student') ? req.user.id : undefined);
+
+        const lessons = await this.lessonsService.getLessonsWithAttendance(
+            courseId,
+            finalStudentId
+        );
+
+        return {
+            success: true,
+            courseId,
+            lessons
+        };
+    }
+
 
     /**
      * Получить посещаемость занятия
@@ -303,6 +471,8 @@ export class LessonsController {
         this.logger.log(`Получение посещаемости для занятия ${lessonId}`);
         return this.lessonsService.getAttendance(lessonId);
     }
+
+
 
     /**
      * Получить занятия по курсу и предмету
@@ -319,52 +489,7 @@ export class LessonsController {
         return this.lessonsService.getLessonsByCourseAndSubject(courseId, subjectId, upcoming === 'true');
     }
 
-    /**
-     * Обновление даты и времени урока (только админ)
-     */
-    @Put(':id/schedule')
-    @UseGuards(RolesGuard)
-    @Roles('admin')
-    @ApiOperation({ 
-        summary: 'Обновление даты и времени урока',
-        description: 'Позволяет администратору изменить дату и время проведения урока'
-    })
-    @ApiParam({ name: 'id', description: 'ID урока' })
-    @ApiBody({
-        schema: {
-            type: 'object',
-            properties: {
-                date: { type: 'string', format: 'date-time' },
-                startTime: { type: 'string', example: '10:00' },
-                endTime: { type: 'string', example: '11:30' }
-            }
-        }
-    })
-    @ApiResponse({ status: 200, description: 'Расписание урока успешно обновлено' })
-    async updateLessonSchedule(
-        @Param('id') lessonId: string,
-        @Body() scheduleData: {
-            date?: Date;
-            startTime?: string;
-            endTime?: string;
-        }
-    ) {
-        this.logger.log(`Обновление расписания урока ${lessonId}`);
-        
-        // Временное решение - используем существующий метод update
-        const updatedLesson = await this.lessonsService.update(
-            lessonId, 
-            scheduleData as any, 
-            'admin-user-id', 
-            true
-        );
 
-        return {
-            success: true,
-            message: 'Расписание урока успешно обновлено',
-            lesson: updatedLesson
-        };
-    }
 
 }
 

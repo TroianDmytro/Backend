@@ -10,7 +10,6 @@ import { Subscription, SubscriptionSchema } from '../subscriptions/schemas/subsc
 import { TeachersModule } from 'src/teachers/teachers.module';
 import { LessonsModule } from 'src/lessons/lessons.module';
 import { SubscriptionsModule } from 'src/subscriptions/subscriptions.module';
-import { TeachersService } from 'src/teachers/teachers.service';
 import { Category, CategorySchema } from '../categories/schemas/category.schema';
 import { DifficultyLevel, DifficultyLevelSchema } from '../difficulty-levels/schemas/difficulty-level.schema';
 import { CategoriesModule } from 'src/categories/categories.module';
@@ -27,7 +26,7 @@ import { SubjectsModule } from 'src/subjects/subjects.module';
             { name: Subscription.name, schema: SubscriptionSchema },
             { name: Subject.name, schema: SubjectSchema },
             { name: Category.name, schema: CategorySchema },
-            { name: DifficultyLevel.name, schema: DifficultyLevelSchema }
+            { name: DifficultyLevel.name, schema: DifficultyLevelSchema },
         ]),
         forwardRef(() => SubjectsModule),
         forwardRef(() => TeachersModule),
