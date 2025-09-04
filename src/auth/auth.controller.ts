@@ -313,10 +313,10 @@ export class AuthController {
         const user = await this.authService.getUserGoogleStatus(userId);
 
         return {
-            isLinked: user.is_google_user,
+            isLinked: !!user.is_google_user,
             googleId: user.is_google_user ? user.googleId : null,
-            lastGoogleLogin: user.last_google_login,
-            hasValidToken: user.isGoogleTokenValid?.() || false
+            lastGoogleLogin: user.last_google_login || null,
+            hasValidToken: !!(user.google_token_expires_at && user.google_token_expires_at > new Date())
         };
     }
 
@@ -621,28 +621,7 @@ export class AuthController {
         }
     }
 
-    // Старый эндпоинт для верификации по токену (для обратной совместимости)
-    @Get('verify-email')
-    @Public()
-    @ApiOperation({ summary: 'Подтверждение email по токену (устаревший метод)' })
-    @ApiResponse({ status: 200, description: 'Email успешно подтвержден' })
-    @ApiResponse({ status: 404, description: 'Неверный или устаревший токен' })
-    @ApiQuery({ name: 'token', description: 'Токен верификации', required: true })
-    async verifyEmail(@Query('token') token: string, @Res() res: Response) {
-        if (!token) {
-            this.logger.warn('Попытка верификации без токена');
-            return res.status(400).send(this.getErrorPage('Токен верификации отсутствует'));
-        }
-
-        try {
-            this.logger.log(`Верификация email с токеном: ${token.substring(0, 8)}...`);
-            const result = await this.authService.verifyEmail(token);
-            return res.send(this.getSuccessPage(result.user.email));
-        } catch (error) {
-            this.logger.error(`Ошибка верификации email: ${error.message}`);
-            return res.status(400).send(this.getErrorPage(error.message));
-        }
-    }
+    // Удалён устаревший GET /auth/verify-email (токен в URL) — заменён кодовой двухстадийной схемой
 
     @Post('forgot-password')
     @Public()

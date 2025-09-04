@@ -1094,6 +1094,96 @@ export class CoursesService {
     }
 
     /**
+     * НОВЫЙ МЕТОД: Добавить предмет (без преподавателя и даты)
+     */
+    async addSubject(
+        courseId: string,
+        subjectId: string,
+        userId: string,
+        isAdmin: boolean
+    ): Promise<CourseDocument> {
+        this.logger.log(`(Шаг 1) Добавление предмета ${subjectId} к курсу ${courseId}`);
+
+        const course = await this.courseModel.findById(courseId);
+        if (!course) throw new NotFoundException('Курс не найден');
+        if (!isAdmin && course.mainTeacher?.toString() !== userId) {
+            throw new ForbiddenException('Нет прав добавлять предмет к этому курсу');
+        }
+
+        const subject = await this.subjectModel.findById(subjectId);
+        if (!subject) throw new NotFoundException('Предмет не найден');
+
+        const exists = course.courseSubjects.find(cs => cs.subject.toString() === subjectId);
+        if (exists) throw new ConflictException('Этот предмет уже добавлен');
+
+        course.courseSubjects.push({
+            subject: subjectId as any,
+            teacher: null as any,
+            startDate: null as any,
+            isActive: true,
+            addedAt: new Date()
+        });
+
+        const updated = await course.save();
+        return updated.populate(['courseSubjects.subject', 'courseSubjects.teacher']);
+    }
+
+    /**
+     * НОВЫЙ МЕТОД: Назначить / изменить преподавателя предмета
+     */
+    async setSubjectTeacher(
+        courseId: string,
+        subjectId: string,
+        teacherId: string,
+        userId: string,
+        isAdmin: boolean
+    ): Promise<CourseDocument> {
+        this.logger.log(`(Шаг 2) Назначение преподавателя ${teacherId} предмету ${subjectId} в курсе ${courseId}`);
+
+        const course = await this.courseModel.findById(courseId);
+        if (!course) throw new NotFoundException('Курс не найден');
+        if (!isAdmin && course.mainTeacher?.toString() !== userId) {
+            throw new ForbiddenException('Нет прав изменять преподавателя');
+        }
+
+        const subjectEntry = course.courseSubjects.find(cs => cs.subject.toString() === subjectId);
+        if (!subjectEntry) throw new NotFoundException('Предмет не добавлен к курсу');
+
+        const teacher = await this.teacherModel.findById(teacherId);
+        if (!teacher) throw new NotFoundException('Преподаватель не найден');
+
+        subjectEntry.teacher = teacherId as any;
+        const updated = await course.save();
+        return updated.populate(['courseSubjects.subject', 'courseSubjects.teacher']);
+    }
+
+    /**
+     * НОВЫЙ МЕТОД: Установить / изменить дату начала предмета
+     */
+    async setSubjectStartDate(
+        courseId: string,
+        subjectId: string,
+        startDate: Date,
+        userId: string,
+        isAdmin: boolean
+    ): Promise<CourseDocument> {
+        this.logger.log(`(Шаг 3) Установка даты начала для предмета ${subjectId} в курсе ${courseId}`);
+
+        const course = await this.courseModel.findById(courseId);
+        if (!course) throw new NotFoundException('Курс не найден');
+        if (!isAdmin && course.mainTeacher?.toString() !== userId) {
+            throw new ForbiddenException('Нет прав изменять дату начала');
+        }
+
+        const subjectEntry = course.courseSubjects.find(cs => cs.subject.toString() === subjectId);
+        if (!subjectEntry) throw new NotFoundException('Предмет не добавлен к курсу');
+
+        subjectEntry.startDate = startDate;
+        const updated = await course.save();
+        return updated.populate(['courseSubjects.subject', 'courseSubjects.teacher']);
+    }
+
+    /**
      * НОВЫЙ МЕТОД: Удалить предмет из курса
      */
     async removeSubjectFromCourse(

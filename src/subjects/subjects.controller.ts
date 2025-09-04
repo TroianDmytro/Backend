@@ -11,20 +11,22 @@ import {
     UploadedFile,
     UseInterceptors,
     Logger,
-    ParseIntPipe,
-    Query
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiResponse, ApiConsumes } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiConsumes, ApiBearerAuth } from '@nestjs/swagger';
 import { SubjectsService } from './subjects.service';
 import { CreateSubjectDto, UpdateSubjectDto, AddStudyMaterialDto } from './dto/subject.dto';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { User } from 'src/users/schemas/user.schema';
+import { UserRole } from 'src/users/enums/user-role.enum';
+import { Public } from 'src/auth/decorators/public.decorator';
 
-@ApiTags('Предметы')
+@ApiTags('Subjects')
 @Controller('subjects')
 @UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
 export class SubjectsController {
     private readonly logger = new Logger(SubjectsController.name);
 
@@ -34,6 +36,7 @@ export class SubjectsController {
      * Получить все предметы
      */
     @Get()
+    @Public()
     @ApiOperation({ summary: 'Получить список всех предметов' })
     @ApiResponse({ status: 200, description: 'Список предметов успешно получен' })
     async findAll() {
@@ -45,6 +48,7 @@ export class SubjectsController {
      * Получить предмет по ID
      */
     @Get(':id')
+    @Public()
     @ApiOperation({ summary: 'Получить предмет по ID' })
     @ApiResponse({ status: 200, description: 'Предмет найден' })
     @ApiResponse({ status: 404, description: 'Предмет не найден' })
@@ -57,10 +61,12 @@ export class SubjectsController {
      * Создать новый предмет (только админ)
      */
     @Post()
-    @UseGuards(RolesGuard)
-    @Roles('admin')
-    @ApiOperation({ summary: 'Создать новый предмет' })
+    @UseGuards(JwtAuthGuard, RolesGuard)
+    @Roles(UserRole.ADMIN)
+    @ApiResponse({ status: 401, description: 'Unauthorized' })
+    @ApiResponse({ status: 403, description: 'Forbidden' })
     @ApiResponse({ status: 201, description: 'Предмет успешно создан' })
+    @ApiOperation({ summary: 'Создать новый предмет' })
     async create(@Body() createSubjectDto: CreateSubjectDto) {
         this.logger.log(`Создание нового предмета: ${createSubjectDto.name}`);
         return this.subjectsService.create(createSubjectDto);
@@ -96,6 +102,7 @@ export class SubjectsController {
      * Получить учебные материалы предмета
      */
     @Get(':id/materials')
+    @Public()
     @ApiOperation({ summary: 'Получить учебные материалы предмета' })
     @ApiResponse({ status: 200, description: 'Учебные материалы получены' })
     async getStudyMaterials(@Param('id') id: string) {

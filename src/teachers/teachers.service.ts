@@ -325,9 +325,9 @@ export class TeachersService {
         }
 
         // Фильтруем и обрабатываем курсы
-        const activeCourses = (teacher.assignedCourses as CourseDocument[]).filter(
-            course => course.isActive && course.isPublished
-        );
+        const activeCourses = (teacher.assignedCourses || [])
+            .map(c => c as unknown as CourseDocument)
+            .filter(course => (course as any)?.isActive && (course as any)?.isPublished);
 
         return activeCourses;
     }

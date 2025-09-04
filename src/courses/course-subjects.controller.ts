@@ -93,11 +93,14 @@ export class CourseSubjectsController {
         }
 
         // Добавляем предмет к курсу
-        const updatedCourse = await this.coursesService.addSubjectToCourse(courseId, {
-            subjectId: addSubjectDto.subjectId,
-            teacherId: addSubjectDto.teacherId,
-            startDate: addSubjectDto.startDate
-        });
+        const updatedCourse = await this.coursesService.addSubjectToCourse(
+            courseId,
+            addSubjectDto.subjectId,
+            addSubjectDto.teacherId || currentUserId, // если не указан преподаватель, назначаем текущего (или можно бросить ошибку)
+            addSubjectDto.startDate,
+            currentUserId,
+            isAdmin
+        );
 
         return {
             message: 'Предмет успешно добавлен к курсу',
@@ -159,7 +162,12 @@ export class CourseSubjectsController {
             throw new ForbiddenException('У вас нет прав для удаления предметов из этого курса');
         }
 
-        const updatedCourse = await this.coursesService.removeSubjectFromCourse(courseId, subjectId);
+        const updatedCourse = await this.coursesService.removeSubjectFromCourse(
+            courseId,
+            subjectId,
+            currentUserId,
+            isAdmin
+        );
 
         return {
             message: 'Предмет успешно удален из курса',

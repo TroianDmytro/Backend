@@ -69,15 +69,16 @@ export class Course {
     // НОВОЕ: Предметы курса с привязанными преподавателями
     @Prop([{
         subject: { type: Types.ObjectId, ref: 'Subject', required: true },
-        teacher: { type: Types.ObjectId, ref: 'Teacher' },
-        startDate: { type: Date, required: true },
+        teacher: { type: Types.ObjectId, ref: 'Teacher', required: false, default: null },
+        // Делается необязательной, чтобы можно было устанавливать позднее отдельным эндпоинтом
+        startDate: { type: Date, required: false, default: null },
         isActive: { type: Boolean, default: true },
         addedAt: { type: Date, default: Date.now }
     }])
     courseSubjects: {
         subject: Subject;
         teacher?: Teacher;
-        startDate: Date;
+    startDate: Date | null;
         isActive: boolean;
         addedAt: Date;
     }[];

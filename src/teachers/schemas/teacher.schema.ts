@@ -8,11 +8,11 @@ export type TeacherDocument = Teacher & Document;
     timestamps: true,
     toJSON: {
         virtuals: true,
-        transform: (doc, ret) => {
-            ret.id = ret._id.toString();
-            delete ret._id;
-            delete ret.__v;
-            delete ret.password;
+        transform: (_doc, ret: any) => {
+            if (ret._id) ret.id = ret._id.toString();
+            if (ret._id !== undefined) delete ret._id; // operands now optional-checked
+            if (ret.__v !== undefined) delete ret.__v;
+            if (ret.password !== undefined) delete ret.password;
             return ret;
         }
     }
@@ -51,6 +51,36 @@ export class Teacher {
     }])
     subjects: Types.ObjectId[];
 
+    // Поля для верификации email и утверждения заявки
+    @Prop({ type: String, default: null })
+    verificationToken?: string | null;
+
+    @Prop({ type: Date, default: null })
+    verificationTokenExpires?: Date | null;
+
+    @Prop({ default: 'pending' })
+    approvalStatus?: 'pending' | 'approved' | 'rejected';
+
+    @Prop({ type: Date, default: null })
+    approvedAt?: Date | null;
+
+    @Prop({ type: Types.ObjectId, ref: 'User' })
+    approvedBy?: Types.ObjectId;
+
+    @Prop({ type: String, default: null })
+    rejectionReason?: string | null;
+
+    // Назначенные курсы
+    @Prop({ type: [Types.ObjectId], ref: 'Course', default: [] })
+    assignedCourses: Types.ObjectId[];
+
+    // Рейтинг и отзывы
+    @Prop({ type: Number, default: 0 })
+    rating: number;
+
+    @Prop({ type: Number, default: 0 })
+    reviewsCount: number;
+
     @Prop({ default: true })
     isActive: boolean;
 
@@ -63,5 +93,4 @@ export class Teacher {
 
 export const TeacherSchema = SchemaFactory.createForClass(Teacher);
 
-TeacherSchema.index({ email: 1 });
 TeacherSchema.index({ subjects: 1 });

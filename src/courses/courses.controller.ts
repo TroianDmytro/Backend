@@ -13,7 +13,8 @@ import {
     Logger,
     NotFoundException,
     ForbiddenException,
-    Req
+    DefaultValuePipe,
+    ParseIntPipe,
 } from '@nestjs/common';
 import {
     ApiTags,
@@ -31,9 +32,7 @@ import { CourseResponseDto } from './dto/course-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { GetUser } from '../auth/decorators/get-user.decorator';
 import { TeachersService } from 'src/teachers/teachers.service';
-import { DefaultValuePipe, ParseIntPipe } from '@nestjs/common';
 import { CourseFilterDto } from './dto/course-filter.dto';
 
 @ApiTags('courses')
@@ -45,47 +44,122 @@ export class CoursesController {
 
     constructor(private readonly coursesService: CoursesService, private readonly teachersService: TeachersService) { }
 
-    /**
-     * POST /courses - Создание нового курса
-     */
+    // ШАГ 1: Добавить предмет к курсу (без преподавателя и даты)
+    @Post(':id/subjects')
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'teacher')
+    @ApiOperation({ summary: 'Шаг 1: Добавить предмет к курсу', description: 'Добавляет предмет без назначения преподавателя и даты' })
+    @ApiParam({ name: 'id', description: 'ID курса' })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: { subjectId: { type: 'string', description: 'ID предмета' } },
+            required: ['subjectId']
+        }
+    })
+    async addCourseSubject(
+        @Param('id') courseId: string,
+        @Body() body: { subjectId: string },
+        @Request() req: any
+    ) {
+        const userId = req.user?.userId || req.user?.id;
+        const isAdmin = req.user?.roles?.includes('admin') || false;
+        const updatedCourse = await this.coursesService.addSubject(
+            courseId,
+            body.subjectId,
+            userId,
+            isAdmin
+        );
+        return { success: true, message: 'Предмет добавлен (шаг 1)', course: updatedCourse };
+    }
+
+    // ШАГ 2: Назначить / изменить преподавателя предмета
+    @Put(':id/subjects/:subjectId/teacher')
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'teacher')
+    @ApiOperation({ summary: 'Шаг 2: Назначить преподавателя предмету', description: 'Присваивает или изменяет преподавателя для предмета курса' })
+    @ApiParam({ name: 'id', description: 'ID курса' })
+    @ApiParam({ name: 'subjectId', description: 'ID предмета' })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: { teacherId: { type: 'string', description: 'ID преподавателя' } },
+            required: ['teacherId']
+        }
+    })
+    async setCourseSubjectTeacher(
+        @Param('id') courseId: string,
+        @Param('subjectId') subjectId: string,
+        @Body() body: { teacherId: string },
+        @Request() req: any
+    ) {
+        const userId = req.user?.userId || req.user?.id;
+        const isAdmin = req.user?.roles?.includes('admin') || false;
+        const updatedCourse = await this.coursesService.setSubjectTeacher(
+            courseId,
+            subjectId,
+            body.teacherId,
+            userId,
+            isAdmin
+        );
+        return { success: true, message: 'Преподаватель назначен (шаг 2)', course: updatedCourse };
+    }
+
+    // ШАГ 3: Установить / изменить дату начала предмета
+    @Put(':id/subjects/:subjectId/start-date')
+    @UseGuards(RolesGuard)
+    @Roles('admin', 'teacher')
+    @ApiOperation({ summary: 'Шаг 3: Установить дату начала предмета', description: 'Устанавливает или изменяет дату начала предмета курса' })
+    @ApiParam({ name: 'id', description: 'ID курса' })
+    @ApiParam({ name: 'subjectId', description: 'ID предмета' })
+    @ApiBody({
+        schema: {
+            type: 'object',
+            properties: { startDate: { type: 'string', format: 'date-time', description: 'Дата начала' } },
+            required: ['startDate']
+        }
+    })
+    async setCourseSubjectStartDate(
+        @Param('id') courseId: string,
+        @Param('subjectId') subjectId: string,
+        @Body() body: { startDate: string },
+        @Request() req: any
+    ) {
+        const userId = req.user?.userId || req.user?.id;
+        const isAdmin = req.user?.roles?.includes('admin') || false;
+        const updatedCourse = await this.coursesService.setSubjectStartDate(
+            courseId,
+            subjectId,
+            new Date(body.startDate),
+            userId,
+            isAdmin
+        );
+        return { success: true, message: 'Дата начала установлена (шаг 3)', course: updatedCourse };
+    }
+
+    // ===== создание курса =====
     @Post()
     @UseGuards(RolesGuard)
-    @Roles('admin', 'teacher') // Только админы и преподаватели могут создавать курсы
-    @ApiOperation({
-        summary: 'Создание нового курса',
-        description: 'Создает новый курс. Только одобренные преподаватели могут создавать курсы.'
-    })
-    @ApiResponse({
-        status: 201,
-        description: 'Курс успешно создан',
-        type: CourseResponseDto
-    })
-    @ApiResponse({ status: 400, description: 'Некорректные данные' })
-    @ApiResponse({ status: 403, description: 'Нет прав на создание курса' })
-    @ApiResponse({ status: 404, description: 'Преподаватель не найден' })
+    @Roles('admin', 'teacher')
+    @ApiOperation({ summary: 'Создать курс', description: 'Создает новый курс (преподаватель может создать курс только для себя)' })
     @ApiBody({ type: CreateCourseDto })
+    @ApiResponse({ status: 201, description: 'Курс создан', type: CourseResponseDto })
+    @ApiResponse({ status: 403, description: 'Нет прав создавать курс для другого преподавателя' })
     async createCourse(
         @Body() createCourseDto: CreateCourseDto,
-        @Request() req?
+        @Request() req?: any
     ) {
         const currentUserId = req?.user?.userId;
         const isAdmin = req?.user?.roles?.includes('admin');
-        // const currentUserId = 'temp-user-id'; // Временно для работы без JWT
-        // const isAdmin = true; // Временно для работы без JWT
 
         this.logger.log(`Создание курса: ${createCourseDto.title}`);
 
-        // Если не админ, преподаватель может создать курс только для себя
-        if (!isAdmin && createCourseDto.teacherId !== currentUserId) {
+        if (!isAdmin && createCourseDto.teacherId && createCourseDto.teacherId !== currentUserId) {
             throw new ForbiddenException('Вы можете создавать курсы только для себя');
         }
 
         const course = await this.coursesService.create(createCourseDto);
-
-        return {
-            message: 'Курс успешно создан',
-            course: course
-        };
+        return { message: 'Курс успешно создан', course };
     }
 
     /**
@@ -114,13 +188,12 @@ export class CoursesController {
         type: [CourseResponseDto]
     })
     async getAllCourses(
-        @Query('page') page: number = 1,
-        @Query('limit') limit: number = 10,
+    @Query('page') page: number = 1,
+    @Query('limit') limit: number = 10,
         @Query() filters: CourseFilterDto,
         @Request() req?
     ) {
-        // const isAdmin = req?.user?.roles?.includes('admin');
-        const isAdmin = true; // Временно для работы без JWT
+    const isAdmin = req?.user?.roles?.includes('admin');
 
         this.logger.log(`Запрос списка курсов. Страница: ${page}, Лимит: ${limit}`);
 
@@ -198,10 +271,8 @@ export class CoursesController {
         @Body() updateCourseDto: UpdateCourseDto,
         @Request() req?
     ) {
-        const currentUserId = req?.user?.userId;
-        const isAdmin = req?.user?.roles?.includes('admin');
-        // const currentUserId = 'temp-user-id'; // Временно для работы без JWT
-        // const isAdmin = true; // Временно для работы без JWT
+    const currentUserId = req?.user?.userId;
+    const isAdmin = req?.user?.roles?.includes('admin');
 
         this.logger.log(`Обновление курса с ID: ${id}`);
 
@@ -242,10 +313,8 @@ export class CoursesController {
         @Param('id') id: string,
         @Request() req?
     ) {
-        const currentUserId = req?.user?.userId;
-        const isAdmin = req?.user?.roles?.includes('admin');
-        // const currentUserId = 'temp-user-id'; // Временно для работы без JWT
-        // const isAdmin = true; // Временно для работы без JWT
+    const currentUserId = req?.user?.userId;
+    const isAdmin = req?.user?.roles?.includes('admin');
 
         this.logger.log(`Удаление курса с ID: ${id}`);
 
@@ -293,10 +362,8 @@ export class CoursesController {
         @Body('isPublished') isPublished: boolean,
         @Request() req?
     ) {
-        const currentUserId = req?.user?.userId;
-        const isAdmin = req?.user?.roles?.includes('admin');
-        // const currentUserId = 'temp-user-id'; // Временно для работы без JWT
-        // const isAdmin = true; // Временно для работы без JWT
+    const currentUserId = req?.user?.userId;
+    const isAdmin = req?.user?.roles?.includes('admin');
 
         this.logger.log(`Изменение статуса публикации курса ${id} на ${isPublished}`);
 
@@ -321,21 +388,23 @@ export class CoursesController {
             );
         }
 
-        // Дополнительная проверка для преподавателей
+        // Дополнительная проверка для преподавателей (исправлено: корректно получаем mainTeacher)
         if (!isAdmin && isOwner) {
-            // Получаем преподавателя
-            const teacher = await this.teachersService.findById(teacherId);
+            const mainTeacherId = course.mainTeacher?.toString();
+            if (!mainTeacherId) {
+                throw new NotFoundException('У курса не назначен преподаватель');
+            }
 
+            const teacher = await this.teachersService.findById(mainTeacherId);
             if (!teacher) {
                 throw new NotFoundException('Преподаватель не найден');
             }
 
-            // ИСПРАВЛЕНО: правильная проверка полей
-            if (!teacher.isApproved) { // теперь поле существует в схеме
+            if (teacher.isApproved === false) {
                 throw new ForbiddenException('Преподаватель не подтвержден');
             }
 
-            if (teacher.isBlocked) { // теперь поле существует в схеме
+            if (teacher.isBlocked) {
                 throw new ForbiddenException('Преподаватель заблокирован');
             }
         }
@@ -838,62 +907,6 @@ export class CoursesController {
         };
     }
 
-    /**
-        * POST /courses/:id/subjects - Добавить предмет к курсу
-        */
-    @Post(':id/subjects')
-    @UseGuards(RolesGuard)
-    @Roles('admin', 'teacher')
-    @ApiOperation({
-        summary: 'Добавить предмет к курсу с назначением преподавателя',
-        description: 'Добавляет предмет к курсу и назначает ему преподавателя. Только админы и владельцы курса.'
-    })
-    @ApiParam({ name: 'id', description: 'ID курса' })
-    @ApiBody({
-        schema: {
-            type: 'object',
-            properties: {
-                subjectId: { type: 'string', description: 'ID предмета' },
-                teacherId: { type: 'string', description: 'ID преподавателя' },
-                startDate: { type: 'string', format: 'date', description: 'Дата начала предмета' }
-            },
-            required: ['subjectId', 'teacherId', 'startDate']
-        }
-    })
-    @ApiResponse({ status: 200, description: 'Предмет успешно добавлен к курсу' })
-    @ApiResponse({ status: 403, description: 'Нет прав доступа' })
-    @ApiResponse({ status: 404, description: 'Курс, предмет или преподаватель не найден' })
-    @ApiResponse({ status: 409, description: 'Предмет уже добавлен к курсу' })
-    async addSubjectToCourse(
-        @Param('id') courseId: string,
-        @Body() addSubjectDto: {
-            subjectId: string;
-            teacherId: string;
-            startDate: string;
-        },
-        @Request() req: any
-    ) {
-        this.logger.log(`Добавление предмета ${addSubjectDto.subjectId} к курсу ${courseId}`);
-
-        const startDate = new Date(addSubjectDto.startDate);
-        const userId = req.user?.userId || req.user?.id;
-        const isAdmin = req.user?.roles?.includes('admin') || false;
-
-        const updatedCourse = await this.coursesService.addSubjectToCourse(
-            courseId,
-            addSubjectDto.subjectId,
-            addSubjectDto.teacherId,
-            startDate,
-            userId,
-            isAdmin
-        );
-
-        return {
-            success: true,
-            message: 'Предмет успешно добавлен к курсу',
-            course: updatedCourse
-        };
-    }
 
     /**
      * DELETE /courses/:courseId/subjects/:subjectId - Удалить предмет из курса

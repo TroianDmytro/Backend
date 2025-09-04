@@ -15,11 +15,10 @@ export type AvatarDocument = Avatar & Document;
     timestamps: true, // Автоматически добавляет createdAt и updatedAt
     toJSON: {
         virtuals: true, // Включает виртуальные поля в JSON
-        transform: (doc, ret) => {
-            // Преобразуем _id в id для удобства
-            ret.id = ret._id.toString();
-            delete ret._id;
-            delete ret.__v;
+        transform: (_doc, ret: any) => {
+            if (ret._id) ret.id = ret._id.toString();
+            if (ret._id !== undefined) delete ret._id;
+            if (ret.__v !== undefined) delete ret.__v;
             return ret;
         }
     }

@@ -447,7 +447,8 @@ export class TeachersController {
         }
 
         // Получаем назначенные курсы
-        const courses = teacher.assignedCourses as CourseDocument[] || [];
+        const courses: CourseDocument[] = (teacher.assignedCourses || [])
+            .map(c => c as unknown as CourseDocument);
 
         return {
             teacherId: id,

@@ -11,10 +11,10 @@ export type CategoryDocument = Category & Document;
     timestamps: true,
     toJSON: {
         virtuals: true,
-        transform: (doc, ret) => {
-            ret.id = ret._id.toString();
-            delete ret._id;
-            delete ret.__v;
+        transform: (_doc, ret: any) => {
+            if (ret._id) ret.id = ret._id.toString();
+            if (ret._id !== undefined) delete ret._id;
+            if (ret.__v !== undefined) delete ret.__v;
             return ret;
         }
     }

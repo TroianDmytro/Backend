@@ -99,7 +99,9 @@ export class UsersService {
         });
 
         // Устанавливаем Google токены
-        newUser.updateGoogleTokens(accessToken, refreshToken);
+        if (typeof newUser.updateGoogleTokens === 'function') {
+            newUser.updateGoogleTokens(accessToken, refreshToken);
+        }
 
         const savedUser = await newUser.save();
 
@@ -146,7 +148,9 @@ export class UsersService {
         user.is_google_user = true;
         user.isEmailVerified = true;
         user.avatar_url = googleData.avatar_url;
-        user.updateGoogleTokens(googleData.accessToken, googleData.refreshToken);
+        if (typeof user.updateGoogleTokens === 'function') {
+            user.updateGoogleTokens(googleData.accessToken, googleData.refreshToken);
+        }
 
         // Обновляем имя/фамилию если они пустые
         if (!user.name && googleData.name) user.name = googleData.name;
@@ -680,7 +684,7 @@ export class UsersService {
 
         // Проверяем, что новый email все еще свободен
         const existingUser = await this.findOne(user.pendingEmail);
-        if (existingUser && existingUser.id?.toString() !== userId) {
+    if (existingUser && (existingUser as any).id?.toString() !== userId) {
             // Очищаем данные изменения email
             user.pendingEmail = null;
             user.emailChangeCode = null;

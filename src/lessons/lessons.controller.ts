@@ -36,7 +36,7 @@ import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { GetUser } from 'src/auth/decorators/get-user.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { MarkAttendanceDto } from './dto/attendance.dto';
+import { MarkAttendanceDto } from './dto/mark-attendance.dto';
 
 
 @ApiTags('lessons')

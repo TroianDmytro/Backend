@@ -657,9 +657,11 @@ export class LessonsService {
         const absent = attendance.filter(a => !a.isPresent).length;
 
         // Средняя оценка за урок
-        const gradesGiven = attendance.filter(a => a.lessonGrade).map(a => a.lessonGrade);
+        const gradesGiven = attendance
+            .map(a => a.lessonGrade)
+            .filter((g): g is number => typeof g === 'number');
         const averageGrade = gradesGiven.length > 0
-            ? gradesGiven.reduce((sum, grade) => sum + grade, 0) / gradesGiven.length
+            ? gradesGiven.reduce((sum: number, grade: number) => sum + grade, 0) / gradesGiven.length
             : 0;
 
         return {
